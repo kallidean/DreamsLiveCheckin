@@ -121,9 +121,7 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
       const { rows: supervisors } = await pool.query(
         `SELECT email FROM users WHERE role = 'supervisor' AND active = true AND verified = true`
       );
-      const recipients = supervisors.map(s => s.email);
-      if (process.env.SUPERVISOR_EMAIL) recipients.push(process.env.SUPERVISOR_EMAIL);
-      const uniqueRecipients = [...new Set(recipients)];
+      const uniqueRecipients = [...new Set(supervisors.map(s => s.email))];
 
       if (uniqueRecipients.length > 0) {
         const html = `
