@@ -58,24 +58,26 @@ export default function CheckInForm() {
 
   const { register, handleSubmit, formState: { errors } } = useForm();
 
-  async function handleCaptureButton() {
+  function handleCaptureButton() {
     setGpsError('');
+    // Must click synchronously — iOS Safari blocks programmatic clicks after any await
+    fileInputRef.current.click();
+    // Get GPS in background for the accuracy display
     setCapturing(true);
-    try {
-      const pos = await getCurrentPosition();
-      setCoords({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-      });
-      fileInputRef.current.click();
-    } catch (err) {
-      setGpsError(
-        'Location access is required to submit a check-in. Please enable location in your browser settings and try again.'
-      );
-    } finally {
-      setCapturing(false);
-    }
+    getCurrentPosition()
+      .then(pos => {
+        setCoords({
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        });
+      })
+      .catch(() => {
+        setGpsError(
+          'Location access is required to submit a check-in. Please enable location in your browser settings and try again.'
+        );
+      })
+      .finally(() => setCapturing(false));
   }
 
   async function handleFileChange(e) {
@@ -92,8 +94,8 @@ export default function CheckInForm() {
 
   async function onSubmit(data) {
     setSubmitError('');
-    if (!photo || !coords) {
-      setSubmitError('Please capture a photo and allow location access before submitting.');
+    if (!photo) {
+      setSubmitError('Please capture a photo before submitting.');
       return;
     }
     setSubmitting(true);
