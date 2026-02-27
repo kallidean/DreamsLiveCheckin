@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken');
 
 function requireAuth(req, res, next) {
-  const token = req.cookies?.accessToken;
+  // Check Authorization header first (needed for iOS Safari which blocks cross-site cookies)
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : req.cookies?.accessToken;
+
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }

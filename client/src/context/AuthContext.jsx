@@ -16,12 +16,16 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     const res = await api.post('/api/auth/login', { email, password });
+    localStorage.setItem('accessToken', res.data.accessToken);
+    localStorage.setItem('refreshToken', res.data.refreshToken);
     setUser(res.data.user);
     return res.data.user;
   }
 
   async function logout() {
     await api.post('/api/auth/logout');
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
     setUser(null);
   }
 

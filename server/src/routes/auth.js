@@ -96,6 +96,8 @@ router.post('/login', async (req, res) => {
 
     res.json({
       success: true,
+      accessToken,
+      refreshToken,
       user: { id: user.id, name: user.name, email: user.email, role: user.role, region: user.region },
     });
   } catch (err) {
@@ -221,7 +223,7 @@ router.post('/reset-password', async (req, res) => {
 
 // POST /api/auth/refresh
 router.post('/refresh', async (req, res) => {
-  const token = req.cookies?.refreshToken;
+  const token = req.cookies?.refreshToken || req.body?.refreshToken;
   if (!token) return res.status(401).json({ error: 'No refresh token' });
   try {
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
@@ -235,7 +237,7 @@ router.post('/refresh', async (req, res) => {
     const payload = { id: user.id, name: user.name, email: user.email, role: user.role, region: user.region };
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
     res.cookie('accessToken', accessToken, { ...COOKIE_OPTS, maxAge: 15 * 60 * 1000 });
-    res.json({ success: true });
+    res.json({ success: true, accessToken });
   } catch (err) {
     res.status(401).json({ error: 'Invalid refresh token' });
   }

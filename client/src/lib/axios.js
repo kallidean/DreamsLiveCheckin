@@ -5,6 +5,15 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Attach access token from localStorage as Authorization header on every request
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('accessToken');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+const SKIP_REFRESH_URLS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/register'];
+
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -12,8 +21,6 @@ function processQueue(error) {
   failedQueue.forEach(prom => (error ? prom.reject(error) : prom.resolve()));
   failedQueue = [];
 }
-
-const SKIP_REFRESH_URLS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/register'];
 
 api.interceptors.response.use(
   res => res,
@@ -29,11 +36,15 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
       try {
-        await api.post('/api/auth/refresh');
+        const refreshToken = localStorage.getItem('refreshToken');
+        const res = await api.post('/api/auth/refresh', { refreshToken });
+        localStorage.setItem('accessToken', res.data.accessToken);
         processQueue(null);
         return api(original);
       } catch (refreshErr) {
         processQueue(refreshErr);
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
         return Promise.reject(refreshErr);
       } finally {
         isRefreshing = false;
