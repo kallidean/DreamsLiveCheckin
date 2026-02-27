@@ -12,7 +12,7 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const COOKIE_OPTS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
 };
 
 // POST /api/auth/register

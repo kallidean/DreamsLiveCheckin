@@ -10,19 +10,30 @@ const userRoutes = require('./routes/users');
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  process.env.CLIENT_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: function(origin, callback) {
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/checkins', checkinRoutes);
 app.use('/api/users', userRoutes);
 
-// Serve client in production
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../../client/dist');
   app.use(express.static(clientDist));
