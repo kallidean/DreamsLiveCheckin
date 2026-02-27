@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { MapPin, ExternalLink, ChevronDown, ChevronUp, Download, RefreshCw } from 'lucide-react';
+import { MapPin, ExternalLink, ChevronDown, ChevronUp, Download, RefreshCw, Trash2 } from 'lucide-react';
 import api from '../lib/axios';
 import Navbar from '../components/Navbar';
+import { useAuth } from '../context/AuthContext';
 
 const TABS = ['Live View', 'Reports'];
 
@@ -25,12 +26,18 @@ function PhotoThumb({ url }) {
   );
 }
 
-function LiveView() {
+function LiveView({ isAdmin }) {
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState({ rep_id: '', region: '', category: '', start_date: '', end_date: '' });
   const [searchName, setSearchName] = useState('');
   const [expanded, setExpanded] = useState(null);
 
   const { data = [], isLoading, refetch, isFetching } = useAllCheckins(filters);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/api/checkins/${id}`).then(r => r.data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-checkins'] }),
+  });
 
   const filtered = useMemo(() => {
     if (!searchName.trim()) return data;
@@ -103,7 +110,7 @@ function LiveView() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['Rep', 'Business', 'Contact', 'Address', 'Time', 'Accuracy', 'Maps', 'Photo'].map(h => (
+                {['Rep', 'Business', 'Contact', 'Address', 'Time', 'Accuracy', 'Maps', 'Photo', ...(isAdmin ? ['Delete'] : [])].map(h => (
                   <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
@@ -139,10 +146,23 @@ function LiveView() {
                     <td className="px-3 py-3">
                       <PhotoThumb url={c.photo_url} />
                     </td>
+                    {isAdmin && (
+                      <td className="px-3 py-3" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => {
+                            if (window.confirm('Delete this check-in?')) deleteMutation.mutate(c.id);
+                          }}
+                          disabled={deleteMutation.isPending}
+                          className="text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                   {expanded === c.id && (
                     <tr key={`${c.id}-detail`}>
-                      <td colSpan={8} className="px-4 py-4 bg-blue-50 border-b border-blue-100">
+                      <td colSpan={isAdmin ? 9 : 8} className="px-4 py-4 bg-blue-50 border-b border-blue-100">
                         <div className="flex gap-4">
                           {c.photo_url && (
                             <img src={c.photo_url} alt="" className="w-40 rounded-lg object-cover shrink-0" />
@@ -165,7 +185,7 @@ function LiveView() {
               ))}
               {!isLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  <td colSpan={isAdmin ? 9 : 8} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No check-ins found
                   </td>
                 </tr>
@@ -373,13 +393,17 @@ function Reports() {
 }
 
 export default function SupervisorDashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [tab, setTab] = useState(0);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">Supervisor Dashboard</h1>
+        <h1 className="text-xl font-bold text-gray-900 mb-6">
+          {isAdmin ? 'Admin Dashboard' : 'Supervisor Dashboard'}
+        </h1>
 
         <div className="flex border-b border-gray-200 mb-6">
           {TABS.map((t, i) => (
@@ -397,7 +421,7 @@ export default function SupervisorDashboard() {
           ))}
         </div>
 
-        {tab === 0 && <LiveView />}
+        {tab === 0 && <LiveView isAdmin={isAdmin} />}
         {tab === 1 && <Reports />}
       </div>
     </div>
