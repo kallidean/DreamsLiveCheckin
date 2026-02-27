@@ -110,7 +110,11 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
 
     // Send supervisor email
     const now = new Date();
-    const timeStr = now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+    const timeStr = now.toLocaleString('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      ...(timezone ? { timeZone: timezone } : {}),
+    });
     const subject = `Check-in: ${req.user.name} @ ${business_name} — ${timeStr}`;
 
     if (process.env.SUPERVISOR_EMAIL) {
