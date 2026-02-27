@@ -38,7 +38,7 @@ router.post('/register', async (req, res) => {
     // Send verification email
     try {
       await resend.emails.send({
-        from: 'DreamsLive <noreply@dreamslive.app>',
+        from: 'DreamsLive <noreply@hellorocket.com>',
         to: email,
         subject: 'Verify your DreamsLive Check-In account',
         html: `
@@ -77,6 +77,9 @@ router.post('/login', async (req, res) => {
     }
     if (!user.verified) {
       return res.status(403).json({ error: 'Please verify your email before logging in' });
+    }
+    if (user.active === false) {
+      return res.status(403).json({ error: 'Your account has been disabled. Please contact your administrator.' });
     }
 
     const valid = await bcrypt.compare(password, user.password_hash);

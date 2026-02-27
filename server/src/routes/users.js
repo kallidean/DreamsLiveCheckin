@@ -1,4 +1,5 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
 const pool = require('../db/pool');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
@@ -8,7 +9,7 @@ const router = express.Router();
 router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name, email, phone, role, region, category, verified, created_at
+      `SELECT id, name, email, phone, role, region, category, verified, active, created_at
        FROM users ORDER BY created_at DESC`
     );
     res.json({ success: true, data: rows });
@@ -18,10 +19,34 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
   }
 });
 
+// POST /api/users — admin only
+router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
+  const { name, email, password, phone, role = 'rep', region, category } = req.body;
+  if (!name || !email || !password) {
+    return res.status(400).json({ error: 'Name, email, and password are required' });
+  }
+  try {
+    const password_hash = await bcrypt.hash(password, 10);
+    const { rows } = await pool.query(
+      `INSERT INTO users (name, email, phone, role, region, category, password_hash, verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+       RETURNING id, name, email, phone, role, region, category, verified, created_at`,
+      [name, email, phone || null, role, region || null, category || null, password_hash]
+    );
+    res.json({ success: true, data: rows[0] });
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
 // PATCH /api/users/:id — admin only
 router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
-  const { role, region, category, verified } = req.body;
+  const { role, region, category, verified, active, phone } = req.body;
 
   const updates = [];
   const params = [];
@@ -42,6 +67,14 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     params.push(verified);
     updates.push(`verified = $${params.length}`);
   }
+  if (active !== undefined) {
+    params.push(active);
+    updates.push(`active = $${params.length}`);
+  }
+  if (phone !== undefined) {
+    params.push(phone || null);
+    updates.push(`phone = $${params.length}`);
+  }
 
   if (updates.length === 0) {
     return res.status(400).json({ error: 'No fields to update' });
@@ -51,7 +84,7 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length}
-       RETURNING id, name, email, phone, role, region, category, verified`,
+       RETURNING id, name, email, phone, role, region, category, verified, active`,
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
@@ -59,6 +92,25 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
+// GET /api/users/:id/checkins — admin only
+router.get('/:id/checkins', requireAuth, requireRole('admin'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT c.*, l.name as location_name, l.address as location_address, l.google_maps_url
+       FROM checkins c
+       LEFT JOIN locations l ON l.id = c.location_id
+       WHERE c.user_id = $1
+       ORDER BY c.checked_in_at DESC`,
+      [id]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch check-ins' });
   }
 });
 

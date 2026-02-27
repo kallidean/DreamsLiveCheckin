@@ -104,7 +104,7 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
     if (process.env.SUPERVISOR_EMAIL) {
       try {
         await resend.emails.send({
-          from: 'DreamsLive <noreply@dreamslive.app>',
+          from: 'DreamsLive <noreply@hellorocket.com>',
           to: process.env.SUPERVISOR_EMAIL,
           subject,
           html: `
@@ -202,6 +202,19 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch check-ins' });
+  }
+});
+
+// DELETE /api/checkins/:id — admin only
+router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query('DELETE FROM checkins WHERE id = $1 RETURNING id', [id]);
+    if (!rows[0]) return res.status(404).json({ error: 'Check-in not found' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete check-in' });
   }
 });
 
