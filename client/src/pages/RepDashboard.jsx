@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { PlusCircle, MapPin, User, Clock, Crosshair, Image } from 'lucide-react';
@@ -105,6 +105,14 @@ function Row({ label, value }) {
 
 export default function RepDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user?.role === 'supervisor' || user?.role === 'admin') {
+      navigate('/supervisor', { replace: true });
+    }
+  }, [user, navigate]);
+
   const now = new Date();
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());

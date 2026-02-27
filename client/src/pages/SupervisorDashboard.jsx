@@ -401,9 +401,14 @@ export default function SupervisorDashboard() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <h1 className="text-xl font-bold text-gray-900 mb-6">
-          {isAdmin ? 'Admin Dashboard' : 'Supervisor Dashboard'}
-        </h1>
+        <div className="mb-6">
+          <h1 className="text-xl font-bold text-gray-900">
+            Welcome back, {user?.name?.split(' ')[0]}
+          </h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {isAdmin ? 'Admin Dashboard' : 'Supervisor Dashboard'}
+          </p>
+        </div>
 
         <div className="flex border-b border-gray-200 mb-6">
           {TABS.map((t, i) => (
