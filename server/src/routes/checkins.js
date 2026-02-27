@@ -2,6 +2,7 @@ const express = require('express');
 const https = require('https');
 const cloudinary = require('cloudinary').v2;
 const { Resend } = require('resend');
+const { find: findTimezone } = require('geo-tz');
 const pool = require('../db/pool');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
@@ -55,6 +56,17 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
       ? `https://www.google.com/maps?q=${latitude},${longitude}`
       : null;
 
+    // Derive timezone from coordinates
+    let timezone = null;
+    if (latitude && longitude) {
+      try {
+        const zones = findTimezone(latitude, longitude);
+        timezone = zones[0] || null;
+      } catch (tzErr) {
+        console.error('Timezone lookup error:', tzErr.message);
+      }
+    }
+
     // Upsert location
     let location;
     const { rows: existingLocs } = await pool.query(
@@ -89,10 +101,10 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
 
     // Insert check-in
     const { rows: checkinRows } = await pool.query(
-      `INSERT INTO checkins (user_id, location_id, contact_name, photo_url, gps_latitude, gps_longitude, gps_accuracy, address_resolved, notes, checked_in_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      `INSERT INTO checkins (user_id, location_id, contact_name, photo_url, gps_latitude, gps_longitude, gps_accuracy, address_resolved, notes, timezone, checked_in_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
        RETURNING *`,
-      [req.user.id, location.id, contact_name, photo_url, latitude || null, longitude || null, gps_accuracy || null, address_resolved, notes || null]
+      [req.user.id, location.id, contact_name, photo_url, latitude || null, longitude || null, gps_accuracy || null, address_resolved, notes || null, timezone]
     );
     const checkin = checkinRows[0];
 

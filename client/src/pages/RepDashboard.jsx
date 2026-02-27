@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { format } from 'date-fns';
+
+function formatTz(dateStr, timezone, opts) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ...opts,
+  }).format(new Date(dateStr));
+}
 import { PlusCircle, MapPin, User, Clock, Crosshair, Image } from 'lucide-react';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +16,7 @@ import Modal from '../components/Modal';
 
 function CheckInCard({ checkin, onClick }) {
   const time = checkin.checked_in_at
-    ? format(new Date(checkin.checked_in_at), "EEE MMM d 'at' h:mm a")
+    ? formatTz(checkin.checked_in_at, checkin.timezone, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
     : '';
 
   return (
@@ -61,7 +67,7 @@ function CheckInCard({ checkin, onClick }) {
 function CheckInDetail({ checkin }) {
   if (!checkin) return null;
   const time = checkin.checked_in_at
-    ? format(new Date(checkin.checked_in_at), "EEEE, MMMM d yyyy 'at' h:mm a")
+    ? formatTz(checkin.checked_in_at, checkin.timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
     : '';
 
   return (

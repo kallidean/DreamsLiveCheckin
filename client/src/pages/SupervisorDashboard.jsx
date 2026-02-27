@@ -1,6 +1,12 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { format } from 'date-fns';
+
+function formatTz(dateStr, timezone, opts) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    ...opts,
+  }).format(new Date(dateStr));
+}
 import { MapPin, ExternalLink, ChevronDown, ChevronUp, Download, RefreshCw, Trash2 } from 'lucide-react';
 import api from '../lib/axios';
 import Navbar from '../components/Navbar';
@@ -131,7 +137,7 @@ function LiveView({ isAdmin }) {
                     <td className="px-3 py-3 text-gray-700 whitespace-nowrap">{c.contact_name}</td>
                     <td className="px-3 py-3 text-gray-500 max-w-[160px] truncate text-xs">{c.address_resolved || '—'}</td>
                     <td className="px-3 py-3 text-gray-600 whitespace-nowrap text-xs">
-                      {c.checked_in_at ? format(new Date(c.checked_in_at), 'MMM d, h:mm a') : '—'}
+                      {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}
                     </td>
                     <td className="px-3 py-3 text-gray-500 whitespace-nowrap text-xs">
                       {c.gps_accuracy ? `±${Math.round(c.gps_accuracy)}m` : '—'}
@@ -174,7 +180,7 @@ function LiveView({ isAdmin }) {
                             <p><span className="font-medium">Business:</span> {c.location_name}</p>
                             <p><span className="font-medium">Contact:</span> {c.contact_name}</p>
                             <p><span className="font-medium">Address:</span> {c.address_resolved || '—'}</p>
-                            <p><span className="font-medium">Time:</span> {c.checked_in_at ? format(new Date(c.checked_in_at), "PPpp") : '—'}</p>
+                            <p><span className="font-medium">Time:</span> {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}</p>
                             {c.notes && <p><span className="font-medium">Notes:</span> {c.notes}</p>}
                           </div>
                         </div>
@@ -241,8 +247,8 @@ function Reports() {
         c.address_resolved || '',
         c.gps_latitude || '', c.gps_longitude || '',
         c.google_maps_url || '',
-        c.checked_in_at ? format(new Date(c.checked_in_at), 'yyyy-MM-dd') : '',
-        c.checked_in_at ? format(new Date(c.checked_in_at), 'HH:mm:ss') : '',
+        c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { year: 'numeric', month: '2-digit', day: '2-digit' }) : '',
+        c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : '',
         c.gps_accuracy || '', c.notes || '',
       ]),
     ];
@@ -357,7 +363,7 @@ function Reports() {
                               {g.checkins.map(c => (
                                 <tr key={c.id}>
                                   <td className="py-1.5 pr-3 whitespace-nowrap">
-                                    {c.checked_in_at ? format(new Date(c.checked_in_at), 'MMM d, h:mm a') : '—'}
+                                    {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}
                                   </td>
                                   <td className="py-1.5 pr-3">{c.location_name}</td>
                                   <td className="py-1.5 pr-3">{c.contact_name}</td>
