@@ -46,7 +46,7 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
 // PATCH /api/users/:id — admin only
 router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
-  const { role, region, category, verified, active, phone } = req.body;
+  const { role, region, category, verified, active, phone, email } = req.body;
 
   const updates = [];
   const params = [];
@@ -74,6 +74,10 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   if (phone !== undefined) {
     params.push(phone || null);
     updates.push(`phone = $${params.length}`);
+  }
+  if (email !== undefined && email) {
+    params.push(email);
+    updates.push(`email = $${params.length}`);
   }
 
   if (updates.length === 0) {
