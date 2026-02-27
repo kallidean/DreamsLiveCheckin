@@ -4,7 +4,7 @@ const path = require('path');
 const pool = require('./pool');
 
 async function migrate() {
-  const migrationsDir = path.join(__dirname, '../../../migrations');
+  const migrationsDir = path.join(__dirname, '../../migrations');
   const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
 
   const client = await pool.connect();
