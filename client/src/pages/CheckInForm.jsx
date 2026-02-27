@@ -30,17 +30,34 @@ function compressImage(file) {
   });
 }
 
-function getCurrentPosition() {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error('Geolocation not supported'));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      timeout: 10000,
-      enableHighAccuracy: true,
-    });
-  });
+function gpsErrorMessage(err) {
+  if (err.code === 1) return 'Location access denied. On iPhone, go to Settings → Privacy → Location Services → Safari → While Using.';
+  if (err.code === 2) return 'Unable to determine your location. Please try moving to an area with better signal.';
+  if (err.code === 3) return 'Location request timed out. Please try again.';
+  return 'Could not get your location. Please try again.';
+}
+
+async function getPosition() {
+  if (!navigator.geolocation) throw new Error('Geolocation not supported');
+  // Try high accuracy first, fall back to low accuracy on timeout/unavailable
+  try {
+    return await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      })
+    );
+  } catch (err) {
+    if (err.code === 1) throw err; // Permission denied — no point retrying
+    return await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 30000,
+      })
+    );
+  }
 }
 
 export default function CheckInForm() {
@@ -64,7 +81,7 @@ export default function CheckInForm() {
     fileInputRef.current.click();
     // Get GPS in background for the accuracy display
     setCapturing(true);
-    getCurrentPosition()
+    getPosition()
       .then(pos => {
         setCoords({
           latitude: pos.coords.latitude,
@@ -72,11 +89,7 @@ export default function CheckInForm() {
           accuracy: pos.coords.accuracy,
         });
       })
-      .catch(() => {
-        setGpsError(
-          'Location access is required to submit a check-in. Please enable location in your browser settings and try again.'
-        );
-      })
+      .catch(err => setGpsError(gpsErrorMessage(err)))
       .finally(() => setCapturing(false));
   }
 
@@ -100,13 +113,20 @@ export default function CheckInForm() {
     }
     setSubmitting(true);
     try {
-      // Refresh GPS at submit time
-      const pos = await getCurrentPosition();
-      const freshCoords = {
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-      };
+      // Get fresh GPS at submit time
+      let freshCoords = null;
+      try {
+        const pos = await getPosition();
+        freshCoords = {
+          latitude: pos.coords.latitude,
+          longitude: pos.coords.longitude,
+          accuracy: pos.coords.accuracy,
+        };
+      } catch (gpsErr) {
+        setSubmitting(false);
+        setSubmitError(gpsErrorMessage(gpsErr));
+        return;
+      }
 
       await api.post('/api/checkins', {
         business_name: data.business_name,
@@ -122,11 +142,7 @@ export default function CheckInForm() {
       addToast('Check-in submitted successfully', 'success');
       navigate('/');
     } catch (err) {
-      if (err.code === err.PERMISSION_DENIED) {
-        setSubmitError('Location access is required to submit a check-in. Please enable location in your browser settings and try again.');
-      } else {
-        setSubmitError(err.response?.data?.error || 'Failed to submit check-in. Please try again.');
-      }
+      setSubmitError(err.response?.data?.error || 'Failed to submit check-in. Please try again.');
     } finally {
       setSubmitting(false);
     }
