@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { useQueryClient } from '@tanstack/react-query';
 import { Camera, MapPin, RefreshCw, Loader, ArrowLeft, AlertTriangle } from 'lucide-react';
 import api from '../lib/axios';
 import Navbar from '../components/Navbar';
@@ -45,6 +46,7 @@ function getCurrentPosition() {
 export default function CheckInForm() {
   const navigate = useNavigate();
   const { addToast } = useToast();
+  const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
 
   const [photo, setPhoto] = useState(null);
@@ -114,6 +116,7 @@ export default function CheckInForm() {
         gps_accuracy: freshCoords.accuracy,
       });
 
+      queryClient.invalidateQueries({ queryKey: ['my-checkins'] });
       addToast('Check-in submitted successfully', 'success');
       navigate('/');
     } catch (err) {
