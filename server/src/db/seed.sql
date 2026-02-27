@@ -1,13 +1,13 @@
 -- Seed data for DreamsLive Check-In
 -- Passwords are bcrypt hashed (10 rounds)
--- admin@test.com / Admin1234
--- supervisor@test.com / Super1234
+-- elitovsky@zenproject.net / Admin1234
+-- Marketing@dreamsresources.com / Super1234
 -- rep1-5@test.com / Rep1234
 
 -- Insert users
 INSERT INTO users (name, email, phone, role, region, category, password_hash, verified) VALUES
-  ('Admin User', 'admin@test.com', '555-000-0001', 'admin', NULL, NULL, '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
-  ('Supervisor Sam', 'supervisor@test.com', '555-000-0002', 'supervisor', NULL, NULL, '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
+  ('Admin User', 'elitovsky@zenproject.net', '555-000-0001', 'admin', NULL, NULL, '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
+  ('Supervisor Sam', 'Marketing@dreamsresources.com', '555-000-0002', 'supervisor', NULL, NULL, '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
   ('Rep One', 'rep1@test.com', '555-000-0003', 'rep', 'North', 'Retail', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
   ('Rep Two', 'rep2@test.com', '555-000-0004', 'rep', 'North', 'Wholesale', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),
   ('Rep Three', 'rep3@test.com', '555-000-0005', 'rep', 'North', 'Retail', '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', true),

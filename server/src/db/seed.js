@@ -15,8 +15,8 @@ async function seed() {
     // Insert users
     await client.query(`
       INSERT INTO users (name, email, phone, role, region, category, password_hash, verified) VALUES
-        ('Admin User', 'admin@test.com', '555-000-0001', 'admin', NULL, NULL, $1, true),
-        ('Supervisor Sam', 'supervisor@test.com', '555-000-0002', 'supervisor', NULL, NULL, $2, true),
+        ('Admin User', 'elitovsky@zenproject.net', '555-000-0001', 'admin', NULL, NULL, $1, true),
+        ('Supervisor Sam', 'Marketing@dreamsresources.com', '555-000-0002', 'supervisor', NULL, NULL, $2, true),
         ('Rep One', 'rep1@test.com', '555-000-0003', 'rep', 'North', 'Retail', $3, true),
         ('Rep Two', 'rep2@test.com', '555-000-0004', 'rep', 'North', 'Wholesale', $3, true),
         ('Rep Three', 'rep3@test.com', '555-000-0005', 'rep', 'North', 'Retail', $3, true),

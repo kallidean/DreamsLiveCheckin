@@ -59,6 +59,6 @@
 
 | Role       | Email                  | Password   |
 |------------|------------------------|------------|
-| Admin      | admin@test.com         | Admin1234  |
-| Supervisor | supervisor@test.com    | Super1234  |
+| Admin      | elitovsky@zenproject.net        | Admin1234  |
+| Supervisor | Marketing@dreamsresources.com   | Super1234  |
 | Rep        | rep1@test.com          | Rep1234    |
