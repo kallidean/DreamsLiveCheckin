@@ -209,8 +209,23 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
 router.delete('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
   try {
-    const { rows } = await pool.query('DELETE FROM checkins WHERE id = $1 RETURNING id', [id]);
+    const { rows } = await pool.query('DELETE FROM checkins WHERE id = $1 RETURNING id, photo_url', [id]);
     if (!rows[0]) return res.status(404).json({ error: 'Check-in not found' });
+
+    // Delete photo from Cloudinary if one exists
+    const photoUrl = rows[0].photo_url;
+    if (photoUrl) {
+      try {
+        // Extract public_id from URL: everything after /upload/ and before the file extension
+        const match = photoUrl.match(/\/upload\/(?:v\d+\/)?(.+)\.[^.]+$/);
+        if (match) {
+          await cloudinary.uploader.destroy(match[1]);
+        }
+      } catch (cloudErr) {
+        console.error('Failed to delete Cloudinary image:', cloudErr.message);
+      }
+    }
+
     res.json({ success: true });
   } catch (err) {
     console.error(err);
