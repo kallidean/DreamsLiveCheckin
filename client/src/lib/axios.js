@@ -13,11 +13,14 @@ function processQueue(error) {
   failedQueue = [];
 }
 
+const SKIP_REFRESH_URLS = ['/api/auth/login', '/api/auth/refresh', '/api/auth/register'];
+
 api.interceptors.response.use(
   res => res,
   async err => {
     const original = err.config;
-    if (err.response?.status === 401 && !original._retry) {
+    const skipRefresh = SKIP_REFRESH_URLS.some(url => original.url?.includes(url));
+    if (err.response?.status === 401 && !original._retry && !skipRefresh) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

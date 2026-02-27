@@ -122,7 +122,7 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
           `,
         });
       } catch (emailErr) {
-        console.error('Failed to send supervisor email:', emailErr.message);
+        console.error('Failed to send supervisor email:', JSON.stringify(emailErr));
       }
     }
 
