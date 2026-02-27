@@ -1,0 +1,16 @@
+{
+  "name": "dreams-live-checkin",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm run dev",
+    "dev:client": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "start": "cd server && npm start",
+    "migrate": "node server/src/db/migrate.js",
+    "seed": "node server/src/db/seed.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0"
+  }
+}
