@@ -117,29 +117,35 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
     });
     const subject = `Check-in: ${req.user.name} @ ${business_name} — ${timeStr}`;
 
-    if (process.env.SUPERVISOR_EMAIL) {
-      try {
-        await resend.emails.send({
-          from: 'DreamsLive <noreply@hellorocket.com>',
-          to: process.env.SUPERVISOR_EMAIL,
-          subject,
-          html: `
-            <h2>New Check-In Received</h2>
-            <table style="border-collapse:collapse;width:100%">
-              <tr><td style="padding:8px;font-weight:bold">Rep</td><td style="padding:8px">${req.user.name}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${timeStr}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold">Business</td><td style="padding:8px">${business_name}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold">Contact</td><td style="padding:8px">${contact_name}</td></tr>
-              <tr><td style="padding:8px;font-weight:bold">Address</td><td style="padding:8px">${address_resolved || 'N/A'}</td></tr>
-              ${google_maps_url ? `<tr><td style="padding:8px;font-weight:bold">Maps</td><td style="padding:8px"><a href="${google_maps_url}">View on Google Maps</a></td></tr>` : ''}
-              ${notes ? `<tr><td style="padding:8px;font-weight:bold">Notes</td><td style="padding:8px">${notes}</td></tr>` : ''}
-            </table>
-            ${photo_url ? `<br><img src="${photo_url}" alt="Check-in photo" style="max-width:600px;border-radius:8px;">` : ''}
-          `,
-        });
-      } catch (emailErr) {
-        console.error('Failed to send supervisor email:', JSON.stringify(emailErr));
+    try {
+      const { rows: supervisors } = await pool.query(
+        `SELECT email FROM users WHERE role = 'supervisor' AND active = true AND verified = true`
+      );
+      const recipients = supervisors.map(s => s.email);
+      if (process.env.SUPERVISOR_EMAIL) recipients.push(process.env.SUPERVISOR_EMAIL);
+      const uniqueRecipients = [...new Set(recipients)];
+
+      if (uniqueRecipients.length > 0) {
+        const html = `
+          <h2>New Check-In Received</h2>
+          <table style="border-collapse:collapse;width:100%">
+            <tr><td style="padding:8px;font-weight:bold">Rep</td><td style="padding:8px">${req.user.name}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${timeStr}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">Business</td><td style="padding:8px">${business_name}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">Contact</td><td style="padding:8px">${contact_name}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">Address</td><td style="padding:8px">${address_resolved || 'N/A'}</td></tr>
+            ${google_maps_url ? `<tr><td style="padding:8px;font-weight:bold">Maps</td><td style="padding:8px"><a href="${google_maps_url}">View on Google Maps</a></td></tr>` : ''}
+            ${notes ? `<tr><td style="padding:8px;font-weight:bold">Notes</td><td style="padding:8px">${notes}</td></tr>` : ''}
+          </table>
+          ${photo_url ? `<br><img src="${photo_url}" alt="Check-in photo" style="max-width:600px;border-radius:8px;">` : ''}
+        `;
+        await Promise.all(uniqueRecipients.map(to =>
+          resend.emails.send({ from: 'DreamsLive <noreply@hellorocket.com>', to, subject, html })
+            .catch(err => console.error(`Failed to send alert to ${to}:`, JSON.stringify(err)))
+        ));
       }
+    } catch (emailErr) {
+      console.error('Failed to send supervisor alerts:', JSON.stringify(emailErr));
     }
 
     res.json({ success: true, data: { checkin } });
