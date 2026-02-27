@@ -17,7 +17,7 @@ const COOKIE_OPTS = {
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { name, email, phone, password, role = 'rep' } = req.body;
+  const { name, email, phone, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
   }
@@ -27,9 +27,9 @@ router.post('/register', async (req, res) => {
 
     const { rows } = await pool.query(
       `INSERT INTO users (name, email, phone, role, password_hash, verified, verification_token)
-       VALUES ($1, $2, $3, $4, $5, false, $6)
+       VALUES ($1, $2, $3, 'rep', $4, false, $5)
        RETURNING id, name, email`,
-      [name, email, phone || null, role, password_hash, verification_token]
+      [name, email, phone || null, password_hash, verification_token]
     );
 
     const user = rows[0];
@@ -145,6 +145,77 @@ router.get('/me', requireAuth, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch user' });
+  }
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email is required' });
+
+  try {
+    const { rows } = await pool.query('SELECT id, name FROM users WHERE email = $1', [email]);
+    // Always return success to prevent email enumeration
+    if (!rows[0]) return res.json({ success: true });
+
+    const token = uuidv4();
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      'UPDATE users SET password_reset_token = $1, password_reset_expires = $2 WHERE id = $3',
+      [token, expires, rows[0].id]
+    );
+
+    const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
+
+    try {
+      await resend.emails.send({
+        from: 'DreamsLive <noreply@hellorocket.com>',
+        to: email,
+        subject: 'Reset your DreamsLive password',
+        html: `
+          <h2>Password Reset Request</h2>
+          <p>Hi ${rows[0].name},</p>
+          <p>Click the button below to reset your password. This link expires in 1 hour.</p>
+          <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">Reset Password</a>
+          <p>Or copy this link: ${resetUrl}</p>
+          <p>If you didn't request this, you can safely ignore this email.</p>
+        `,
+      });
+    } catch (emailErr) {
+      console.error('Failed to send reset email:', JSON.stringify(emailErr));
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token and password are required' });
+
+  try {
+    const { rows } = await pool.query(
+      'SELECT id FROM users WHERE password_reset_token = $1 AND password_reset_expires > NOW()',
+      [token]
+    );
+
+    if (!rows[0]) return res.status(400).json({ error: 'Invalid or expired reset link. Please request a new one.' });
+
+    const password_hash = await bcrypt.hash(password, 10);
+    await pool.query(
+      'UPDATE users SET password_hash = $1, password_reset_token = NULL, password_reset_expires = NULL WHERE id = $2',
+      [password_hash, rows[0].id]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset password' });
   }
 });
 
