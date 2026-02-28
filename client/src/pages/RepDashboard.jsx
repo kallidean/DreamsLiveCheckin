@@ -8,7 +8,7 @@ function formatTz(dateStr, timezone, opts) {
     ...opts,
   }).format(new Date(dateStr));
 }
-import { PlusCircle, MapPin, User, Clock, Crosshair, Image } from 'lucide-react';
+import { PlusCircle, MapPin, User, Clock, Crosshair, Image, FileDown, Loader } from 'lucide-react';
 import api from '../lib/axios';
 import { useAuth } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
@@ -111,6 +111,152 @@ function Row({ label, value }) {
   );
 }
 
+function escapeCSV(val) {
+  if (val == null) return '';
+  const s = String(val);
+  return s.includes(',') || s.includes('"') || s.includes('\n')
+    ? `"${s.replace(/"/g, '""')}"`
+    : s;
+}
+
+function exportCSV(rows, repName) {
+  const headers = ['Date', 'Time', 'Business', 'Contact Name', 'Contact Email', 'Contact Phone', 'Address', 'Notes', 'Maps Link'];
+  const lines = [headers.join(',')];
+  for (const c of rows) {
+    const tz = c.timezone;
+    const date = c.checked_in_at ? formatTz(c.checked_in_at, tz, { year: 'numeric', month: '2-digit', day: '2-digit' }) : '';
+    const time = c.checked_in_at ? formatTz(c.checked_in_at, tz, { hour: 'numeric', minute: '2-digit', hour12: true }) : '';
+    lines.push([
+      escapeCSV(date),
+      escapeCSV(time),
+      escapeCSV(c.location_name),
+      escapeCSV(c.contact_name),
+      escapeCSV(c.contact_email),
+      escapeCSV(c.contact_phone),
+      escapeCSV(c.address_resolved),
+      escapeCSV(c.notes),
+      escapeCSV(c.google_maps_url),
+    ].join(','));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `checkins-${repName.replace(/\s+/g, '-')}-${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function ReportModal({ isOpen, onClose, repName }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState(today);
+  const [rows, setRows] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function generate() {
+    if (!startDate) { setError('Please select a start date.'); return; }
+    setError('');
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+      const res = await api.get(`/api/checkins/my?${params}`);
+      setRows(res.data.data);
+    } catch {
+      setError('Failed to load report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleClose() {
+    setRows(null);
+    setError('');
+    onClose();
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} title="Export Report">
+      <div className="space-y-4">
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || today}
+              onChange={e => setStartDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">End Date</label>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate}
+              max={today}
+              onChange={e => setEndDate(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-red-500 text-xs">{error}</p>}
+
+        <button
+          onClick={generate}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold py-2 rounded-lg text-sm transition-colors"
+        >
+          {loading ? <><Loader size={14} className="animate-spin" /> Generating…</> : 'Generate Report'}
+        </button>
+
+        {rows !== null && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-700">{rows.length} check-in{rows.length !== 1 ? 's' : ''} found</p>
+              {rows.length > 0 && (
+                <button
+                  onClick={() => exportCSV(rows, repName)}
+                  className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <FileDown size={13} /> Export CSV
+                </button>
+              )}
+            </div>
+
+            {rows.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-6">No check-ins in this date range.</p>
+            ) : (
+              <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+                {rows.map(c => {
+                  const time = c.checked_in_at
+                    ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                    : '';
+                  return (
+                    <div key={c.id} className="px-3 py-2.5 bg-white hover:bg-gray-50">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-sm text-gray-900 truncate">{c.location_name}</p>
+                        <p className="text-xs text-gray-400 shrink-0">{time}</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">{c.contact_name}</p>
+                      {c.address_resolved && (
+                        <p className="text-xs text-gray-400 truncate mt-0.5">{c.address_resolved}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 export default function RepDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -125,6 +271,7 @@ export default function RepDashboard() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [selected, setSelected] = useState(null);
+  const [reportOpen, setReportOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['my-checkins', month, year],
@@ -146,13 +293,22 @@ export default function RepDashboard() {
             <h1 className="text-xl font-bold text-gray-900">Welcome back, {user?.name?.split(' ')[0]}</h1>
             <p className="text-sm text-gray-500 mt-0.5">Your check-in history</p>
           </div>
-          <Link
-            to="/checkin/new"
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors text-sm"
-          >
-            <PlusCircle size={16} />
-            New Check-In
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setReportOpen(true)}
+              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold px-3 py-2.5 rounded-lg transition-colors text-sm"
+            >
+              <FileDown size={16} />
+              Report
+            </button>
+            <Link
+              to="/checkin/new"
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-lg transition-colors text-sm"
+            >
+              <PlusCircle size={16} />
+              New Check-In
+            </Link>
+          </div>
         </div>
 
         <div className="flex gap-2 mb-6">
@@ -198,6 +354,8 @@ export default function RepDashboard() {
       <Modal isOpen={!!selected} onClose={() => setSelected(null)} title="Check-In Details">
         <CheckInDetail checkin={selected} />
       </Modal>
+
+      <ReportModal isOpen={reportOpen} onClose={() => setReportOpen(false)} repName={user?.name || ''} />
     </div>
   );
 }

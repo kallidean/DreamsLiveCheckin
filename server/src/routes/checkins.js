@@ -158,20 +158,41 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
 // GET /api/checkins/my
 router.get('/my', requireAuth, async (req, res) => {
   const now = new Date();
-  const month = parseInt(req.query.month) || now.getMonth() + 1;
-  const year = parseInt(req.query.year) || now.getFullYear();
+  const { start_date, end_date } = req.query;
 
   try {
-    const { rows } = await pool.query(
-      `SELECT c.*, l.name as location_name, l.address as location_address, l.google_maps_url
-       FROM checkins c
-       LEFT JOIN locations l ON l.id = c.location_id
-       WHERE c.user_id = $1
-         AND EXTRACT(MONTH FROM c.checked_in_at) = $2
-         AND EXTRACT(YEAR FROM c.checked_in_at) = $3
-       ORDER BY c.checked_in_at DESC`,
-      [req.user.id, month, year]
-    );
+    let query, params;
+
+    if (start_date || end_date) {
+      const conditions = ['c.user_id = $1'];
+      params = [req.user.id];
+      if (start_date) {
+        params.push(start_date);
+        conditions.push(`c.checked_in_at >= $${params.length}`);
+      }
+      if (end_date) {
+        params.push(end_date);
+        conditions.push(`c.checked_in_at <= $${params.length}::date + interval '1 day'`);
+      }
+      query = `SELECT c.*, l.name as location_name, l.address as location_address, l.google_maps_url
+               FROM checkins c
+               LEFT JOIN locations l ON l.id = c.location_id
+               WHERE ${conditions.join(' AND ')}
+               ORDER BY c.checked_in_at DESC`;
+    } else {
+      const month = parseInt(req.query.month) || now.getMonth() + 1;
+      const year = parseInt(req.query.year) || now.getFullYear();
+      query = `SELECT c.*, l.name as location_name, l.address as location_address, l.google_maps_url
+               FROM checkins c
+               LEFT JOIN locations l ON l.id = c.location_id
+               WHERE c.user_id = $1
+                 AND EXTRACT(MONTH FROM c.checked_in_at) = $2
+                 AND EXTRACT(YEAR FROM c.checked_in_at) = $3
+               ORDER BY c.checked_in_at DESC`;
+      params = [req.user.id, month, year];
+    }
+
+    const { rows } = await pool.query(query, params);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error(err);
