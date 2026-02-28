@@ -209,13 +209,21 @@ function LiveView({ isAdmin }) {
 function Reports() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [repId, setRepId] = useState('');
   const [groupBy, setGroupBy] = useState('rep');
   const [generated, setGenerated] = useState(false);
 
+  const { data: reps = [] } = useQuery({
+    queryKey: ['reps-list'],
+    queryFn: () => api.get('/api/users/reps').then(r => r.data.data),
+  });
+
   const { data = [], isLoading, refetch } = useQuery({
-    queryKey: ['report-checkins', startDate, endDate],
+    queryKey: ['report-checkins', startDate, endDate, repId],
     queryFn: () => {
-      const q = new URLSearchParams(Object.fromEntries(Object.entries({ start_date: startDate, end_date: endDate }).filter(([, v]) => v)));
+      const q = new URLSearchParams(Object.fromEntries(
+        Object.entries({ start_date: startDate, end_date: endDate, rep_id: repId }).filter(([, v]) => v)
+      ));
       return api.get(`/api/checkins/all?${q}`).then(r => r.data.data);
     },
     enabled: false,
@@ -242,10 +250,13 @@ function Reports() {
   }
 
   function exportCsv() {
+    const selectedRep = reps.find(r => String(r.id) === String(repId));
+    const repLabel = selectedRep ? selectedRep.name.replace(/\s+/g, '-') : 'all-reps';
     const rows = [
-      ['Rep Name', 'Region', 'Category', 'Business Name', 'Contact', 'Address', 'Latitude', 'Longitude', 'Maps URL', 'Date', 'Time', 'GPS Accuracy', 'Notes'],
+      ['Rep Name', 'Region', 'Category', 'Business Name', 'Contact Name', 'Contact Email', 'Contact Phone', 'Address', 'Latitude', 'Longitude', 'Maps URL', 'Date', 'Time', 'GPS Accuracy', 'Notes'],
       ...data.map(c => [
         c.rep_name, c.region, c.category, c.location_name, c.contact_name,
+        c.contact_email || '', c.contact_phone || '',
         c.address_resolved || '',
         c.gps_latitude || '', c.gps_longitude || '',
         c.google_maps_url || '',
@@ -259,7 +270,7 @@ function Reports() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `checkins-report-${startDate}-to-${endDate}.csv`;
+    a.download = `checkins-${repLabel}-${startDate}-to-${endDate}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -267,12 +278,24 @@ function Reports() {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="col-span-2 sm:col-span-1">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Rep</label>
+            <select
+              value={repId}
+              onChange={e => setRepId(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Reps</option>
+              {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Start Date *</label>
             <input
               type="date"
               value={startDate}
+              max={endDate || undefined}
               onChange={e => setStartDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -282,6 +305,7 @@ function Reports() {
             <input
               type="date"
               value={endDate}
+              min={startDate || undefined}
               onChange={e => setEndDate(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -298,7 +322,7 @@ function Reports() {
               <option value="category">Category</option>
             </select>
           </div>
-          <div className="flex items-end">
+          <div className="flex items-end col-span-2 sm:col-span-2">
             <button
               onClick={handleGenerate}
               disabled={!startDate || !endDate || isLoading}

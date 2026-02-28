@@ -99,6 +99,19 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   }
 });
 
+// GET /api/users/reps — supervisor and admin (for report filter dropdown)
+router.get('/reps', requireAuth, requireRole('supervisor', 'admin'), async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name FROM users WHERE role = 'rep' AND active = true ORDER BY name ASC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch reps' });
+  }
+});
+
 // GET /api/users/:id/checkins — admin only
 router.get('/:id/checkins', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
