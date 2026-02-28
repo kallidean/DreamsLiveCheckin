@@ -34,7 +34,7 @@ function fetchNominatim(lat, lng) {
 
 // POST /api/checkins
 router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (req, res) => {
-  const { business_name, contact_name, notes, photo, latitude, longitude, gps_accuracy } = req.body;
+  const { business_name, contact_name, contact_email, contact_phone, notes, photo, latitude, longitude, gps_accuracy } = req.body;
 
   if (!business_name || !contact_name) {
     return res.status(400).json({ error: 'Business name and contact name are required' });
@@ -101,10 +101,10 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
 
     // Insert check-in
     const { rows: checkinRows } = await pool.query(
-      `INSERT INTO checkins (user_id, location_id, contact_name, photo_url, gps_latitude, gps_longitude, gps_accuracy, address_resolved, notes, timezone, checked_in_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      `INSERT INTO checkins (user_id, location_id, contact_name, contact_email, contact_phone, photo_url, gps_latitude, gps_longitude, gps_accuracy, address_resolved, notes, timezone, checked_in_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
        RETURNING *`,
-      [req.user.id, location.id, contact_name, photo_url, latitude || null, longitude || null, gps_accuracy || null, address_resolved, notes || null, timezone]
+      [req.user.id, location.id, contact_name, contact_email || null, contact_phone || null, photo_url, latitude || null, longitude || null, gps_accuracy || null, address_resolved, notes || null, timezone]
     );
     const checkin = checkinRows[0];
 
@@ -131,6 +131,8 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
             <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${timeStr}</td></tr>
             <tr><td style="padding:8px;font-weight:bold">Business</td><td style="padding:8px">${business_name}</td></tr>
             <tr><td style="padding:8px;font-weight:bold">Contact</td><td style="padding:8px">${contact_name}</td></tr>
+            ${contact_email ? `<tr><td style="padding:8px;font-weight:bold">Contact Email</td><td style="padding:8px">${contact_email}</td></tr>` : ''}
+            ${contact_phone ? `<tr><td style="padding:8px;font-weight:bold">Contact Phone</td><td style="padding:8px">${contact_phone}</td></tr>` : ''}
             <tr><td style="padding:8px;font-weight:bold">Address</td><td style="padding:8px">${address_resolved || 'N/A'}</td></tr>
             ${google_maps_url ? `<tr><td style="padding:8px;font-weight:bold">Maps</td><td style="padding:8px"><a href="${google_maps_url}">View on Google Maps</a></td></tr>` : ''}
             ${notes ? `<tr><td style="padding:8px;font-weight:bold">Notes</td><td style="padding:8px">${notes}</td></tr>` : ''}

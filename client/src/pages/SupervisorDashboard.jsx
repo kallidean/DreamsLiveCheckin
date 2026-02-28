@@ -179,6 +179,8 @@ function LiveView({ isAdmin }) {
                             <p><span className="font-medium">Category:</span> {c.category || '—'}</p>
                             <p><span className="font-medium">Business:</span> {c.location_name}</p>
                             <p><span className="font-medium">Contact:</span> {c.contact_name}</p>
+                            {c.contact_email && <p><span className="font-medium">Contact Email:</span> {c.contact_email}</p>}
+                            {c.contact_phone && <p><span className="font-medium">Contact Phone:</span> {c.contact_phone}</p>}
                             <p><span className="font-medium">Address:</span> {c.address_resolved || '—'}</p>
                             <p><span className="font-medium">Time:</span> {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}</p>
                             {c.notes && <p><span className="font-medium">Notes:</span> {c.notes}</p>}

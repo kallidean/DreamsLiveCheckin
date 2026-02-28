@@ -131,6 +131,8 @@ export default function CheckInForm() {
       await api.post('/api/checkins', {
         business_name: data.business_name,
         contact_name: data.contact_name,
+        contact_email: data.contact_email,
+        contact_phone: data.contact_phone,
         notes: data.notes,
         photo,
         latitude: freshCoords.latitude,
@@ -189,6 +191,26 @@ export default function CheckInForm() {
               {errors.contact_name && (
                 <p className="text-red-500 text-xs mt-1">{errors.contact_name.message}</p>
               )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Email</label>
+              <input
+                {...register('contact_email')}
+                type="email"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="contact@example.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
+              <input
+                {...register('contact_phone')}
+                type="tel"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="(555) 555-5555"
+              />
             </div>
 
             <div>

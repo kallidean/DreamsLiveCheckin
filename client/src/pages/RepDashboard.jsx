@@ -78,6 +78,8 @@ function CheckInDetail({ checkin }) {
       <div className="space-y-2 text-sm">
         <Row label="Business" value={checkin.location_name} />
         <Row label="Contact" value={checkin.contact_name} />
+        {checkin.contact_email && <Row label="Contact Email" value={checkin.contact_email} />}
+        {checkin.contact_phone && <Row label="Contact Phone" value={checkin.contact_phone} />}
         <Row label="Time" value={time} />
         {checkin.address_resolved && <Row label="Address" value={checkin.address_resolved} />}
         {checkin.gps_accuracy && <Row label="GPS Accuracy" value={`±${Math.round(checkin.gps_accuracy)} meters`} />}

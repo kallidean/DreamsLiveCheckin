@@ -1,0 +1,2 @@
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS contact_email VARCHAR;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS contact_phone VARCHAR;
