@@ -210,6 +210,8 @@ function Reports() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [repId, setRepId] = useState('');
+  const [region, setRegion] = useState('');
+  const [category, setCategory] = useState('');
   const [groupBy, setGroupBy] = useState('rep');
   const [generated, setGenerated] = useState(false);
 
@@ -219,10 +221,10 @@ function Reports() {
   });
 
   const { data = [], isLoading, refetch } = useQuery({
-    queryKey: ['report-checkins', startDate, endDate, repId],
+    queryKey: ['report-checkins', startDate, endDate, repId, region, category],
     queryFn: () => {
       const q = new URLSearchParams(Object.fromEntries(
-        Object.entries({ start_date: startDate, end_date: endDate, rep_id: repId }).filter(([, v]) => v)
+        Object.entries({ start_date: startDate, end_date: endDate, rep_id: repId, region, category }).filter(([, v]) => v)
       ));
       return api.get(`/api/checkins/all?${q}`).then(r => r.data.data);
     },
@@ -251,7 +253,12 @@ function Reports() {
 
   function exportCsv() {
     const selectedRep = reps.find(r => String(r.id) === String(repId));
-    const repLabel = selectedRep ? selectedRep.name.replace(/\s+/g, '-') : 'all-reps';
+    const parts = [
+      selectedRep ? selectedRep.name.replace(/\s+/g, '-') : 'all-reps',
+      region || null,
+      category || null,
+    ].filter(Boolean);
+    const repLabel = parts.join('-');
     const rows = [
       ['Rep Name', 'Region', 'Category', 'Business Name', 'Contact Name', 'Contact Email', 'Contact Phone', 'Address', 'Latitude', 'Longitude', 'Maps URL', 'Date', 'Time', 'GPS Accuracy', 'Notes'],
       ...data.map(c => [
@@ -278,8 +285,8 @@ function Reports() {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div className="col-span-2 sm:col-span-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rep</label>
             <select
               value={repId}
@@ -288,6 +295,30 @@ function Reports() {
             >
               <option value="">All Reps</option>
               {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Region</label>
+            <select
+              value={region}
+              onChange={e => setRegion(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Regions</option>
+              <option value="North">North</option>
+              <option value="South">South</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Category</label>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Categories</option>
+              <option value="Retail">Retail</option>
+              <option value="Wholesale">Wholesale</option>
             </select>
           </div>
           <div>
@@ -322,7 +353,7 @@ function Reports() {
               <option value="category">Category</option>
             </select>
           </div>
-          <div className="flex items-end col-span-2 sm:col-span-2">
+          <div className="flex items-end sm:col-span-3">
             <button
               onClick={handleGenerate}
               disabled={!startDate || !endDate || isLoading}
