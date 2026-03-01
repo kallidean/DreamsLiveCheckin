@@ -276,6 +276,7 @@ export default function RepDashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['my-checkins', month, year],
     queryFn: () => api.get(`/api/checkins/my?month=${month}&year=${year}`).then(r => r.data.data),
+    refetchOnMount: 'always',
   });
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
