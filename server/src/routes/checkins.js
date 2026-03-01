@@ -186,8 +186,8 @@ router.get('/my', requireAuth, async (req, res) => {
                FROM checkins c
                LEFT JOIN locations l ON l.id = c.location_id
                WHERE c.user_id = $1
-                 AND EXTRACT(MONTH FROM c.checked_in_at AT TIME ZONE COALESCE(c.timezone, 'UTC')) = $2
-                 AND EXTRACT(YEAR FROM c.checked_in_at AT TIME ZONE COALESCE(c.timezone, 'UTC')) = $3
+                 AND EXTRACT(MONTH FROM (c.checked_in_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(c.timezone, 'UTC')) = $2
+                 AND EXTRACT(YEAR FROM (c.checked_in_at AT TIME ZONE 'UTC') AT TIME ZONE COALESCE(c.timezone, 'UTC')) = $3
                ORDER BY c.checked_in_at DESC`;
       params = [req.user.id, month, year];
     }
