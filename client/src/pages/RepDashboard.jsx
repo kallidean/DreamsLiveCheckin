@@ -311,6 +311,15 @@ export default function RepDashboard() {
           </div>
         </div>
 
+        {!isLoading && data && (
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl font-bold text-blue-600">{data.length}</span>
+            <span className="text-sm text-gray-500">
+              check-in{data.length !== 1 ? 's' : ''} in {months[month - 1]} {year}
+            </span>
+          </div>
+        )}
+
         <div className="flex gap-2 mb-6">
           <select
             value={month}
