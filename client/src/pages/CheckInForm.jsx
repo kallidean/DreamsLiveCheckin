@@ -140,7 +140,7 @@ export default function CheckInForm() {
         gps_accuracy: freshCoords.accuracy,
       });
 
-      queryClient.invalidateQueries({ queryKey: ['my-checkins'] });
+      await queryClient.invalidateQueries({ queryKey: ['my-checkins'] });
       addToast('Check-in submitted successfully', 'success');
       navigate('/');
     } catch (err) {
