@@ -138,13 +138,19 @@ function exportCSV(rows, repName) {
       escapeCSV(c.google_maps_url),
     ].join(','));
   }
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `checkins-${repName.replace(/\s+/g, '-')}-${Date.now()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) {
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } else {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `checkins-${repName.replace(/\s+/g, '-')}-${Date.now()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 }
 
 function ReportModal({ isOpen, onClose, repName }) {

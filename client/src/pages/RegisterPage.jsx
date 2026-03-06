@@ -1,6 +1,7 @@
 import { useForm } from 'react-hook-form';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import api from '../lib/axios';
 import { MailCheck } from 'lucide-react';
 
@@ -8,6 +9,16 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { data: config, isLoading: configLoading } = useQuery({
+    queryKey: ['app-config'],
+    queryFn: () => api.get('/api/auth/config').then(r => r.data),
+    staleTime: Infinity,
+  });
+
+  if (!configLoading && !config?.registrationEnabled) {
+    return <Navigate to="/login" replace />;
+  }
 
   const { register, handleSubmit, watch, formState: { errors } } = useForm();
   const password = watch('password');

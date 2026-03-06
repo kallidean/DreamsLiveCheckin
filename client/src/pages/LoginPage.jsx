@@ -1,8 +1,10 @@
 import { useForm } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { CheckCircle } from 'lucide-react';
+import api from '../lib/axios';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -10,6 +12,12 @@ export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const { data: config } = useQuery({
+    queryKey: ['app-config'],
+    queryFn: () => api.get('/api/auth/config').then(r => r.data),
+    staleTime: Infinity,
+  });
   const verified = searchParams.get('verified') === 'true';
 
   const { register, handleSubmit, formState: { errors } } = useForm();
@@ -91,12 +99,14 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Don't have an account?{' '}
-          <Link to="/register" className="text-blue-600 font-medium hover:underline">
-            Register
-          </Link>
-        </p>
+        {config?.registrationEnabled && (
+          <p className="text-center text-sm text-gray-500 mt-6">
+            Don't have an account?{' '}
+            <Link to="/register" className="text-blue-600 font-medium hover:underline">
+              Register
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

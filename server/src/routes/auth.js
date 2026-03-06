@@ -15,8 +15,16 @@ const COOKIE_OPTS = {
   sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
 };
 
+// GET /api/auth/config — public, no auth required
+router.get('/config', (req, res) => {
+  res.json({ registrationEnabled: process.env.REGISTRATION_ENABLED === 'true' });
+});
+
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
+  if (process.env.REGISTRATION_ENABLED !== 'true') {
+    return res.status(403).json({ error: 'Registration is currently disabled.' });
+  }
   const { name, email, phone, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
