@@ -7,6 +7,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const checkinRoutes = require('./routes/checkins');
 const userRoutes = require('./routes/users');
+const regionRoutes = require('./routes/regions');
 
 const app = express();
 
@@ -34,6 +35,7 @@ app.use(cookieParser());
 app.use('/api/auth', authRoutes);
 app.use('/api/checkins', checkinRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/regions', regionRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   const clientDist = path.join(__dirname, '../../../client/dist');

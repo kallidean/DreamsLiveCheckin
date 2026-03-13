@@ -6,7 +6,7 @@ import Navbar from '../../components/Navbar';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 
-function AddUserModal({ onClose, supervisors, defaultSupervisorId }) {
+function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [form, setForm] = useState({
@@ -94,12 +94,17 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId }) {
             </select>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
-            <input
+            <label className="block text-xs font-medium text-gray-700 mb-1">Region (State)</label>
+            <select
               value={form.region}
               onChange={e => setForm(p => ({ ...p, region: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="">— Select State —</option>
+              {regions.map(r => (
+                <option key={r.code} value={r.code}>{r.name}</option>
+              ))}
+            </select>
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -149,7 +154,7 @@ const cellCls = {
 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-function UserRow({ user, supervisors }) {
+function UserRow({ user, supervisors, regions }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [edits, setEdits] = useState({
@@ -236,12 +241,16 @@ function UserRow({ user, supervisors }) {
 
         <div className={`flex flex-col ${cellCls.region}`}>
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Region</span>
-          <input
+          <select
             value={edits.region}
             onChange={e => setEdits(p => ({ ...p, region: e.target.value }))}
             className={inputCls}
-            placeholder="Region"
-          />
+          >
+            <option value="">—</option>
+            {regions.map(r => (
+              <option key={r.code} value={r.code}>{r.code}</option>
+            ))}
+          </select>
         </div>
 
         <div className={`flex flex-col ${cellCls.supervisor}`}>
@@ -312,6 +321,12 @@ export default function UserManagement() {
   const { data: supervisors = [] } = useQuery({
     queryKey: ['supervisors'],
     queryFn: () => api.get('/api/users/supervisors').then(r => r.data.data),
+  });
+
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => api.get('/api/regions').then(r => r.data.data),
+    staleTime: Infinity,
   });
 
   const filteredUsers = useMemo(() => {
@@ -391,7 +406,7 @@ export default function UserManagement() {
           </div>
 
           {filteredUsers.map(user => (
-            <UserRow key={user.id} user={user} supervisors={supervisors} />
+            <UserRow key={user.id} user={user} supervisors={supervisors} regions={regions} />
           ))}
           {!isLoading && filteredUsers.length === 0 && (
             <div className="px-4 py-8 text-center text-gray-400">No users found</div>
@@ -405,6 +420,7 @@ export default function UserManagement() {
           onClose={() => setShowAddUser(false)}
           supervisors={supervisors}
           defaultSupervisorId={filterSupervisorId}
+          regions={regions}
         />
       )}
     </div>

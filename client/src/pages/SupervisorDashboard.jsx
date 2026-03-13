@@ -55,6 +55,12 @@ function LiveView({ isAdmin }) {
     },
   });
 
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => api.get('/api/regions').then(r => r.data.data),
+    staleTime: Infinity,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/api/checkins/${id}`).then(r => r.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-checkins'] }),
@@ -96,9 +102,10 @@ function LiveView({ isAdmin }) {
             onChange={e => setFilters(f => ({ ...f, region: e.target.value }))}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="">All Regions</option>
-            <option value="North">North</option>
-            <option value="South">South</option>
+            <option value="">All States</option>
+            {regions.map(r => (
+              <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+            ))}
           </select>
           <select
             value={filters.category}
@@ -257,6 +264,12 @@ function Reports({ isAdmin }) {
     },
   });
 
+  const { data: regions = [] } = useQuery({
+    queryKey: ['regions'],
+    queryFn: () => api.get('/api/regions').then(r => r.data.data),
+    staleTime: Infinity,
+  });
+
   const { data = [], isLoading, refetch } = useQuery({
     queryKey: ['report-checkins', startDate, endDate, supervisorId, repId, region, category],
     queryFn: () => {
@@ -366,15 +379,16 @@ function Reports({ isAdmin }) {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Region</label>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Region (State)</label>
             <select
               value={region}
               onChange={e => setRegion(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">All Regions</option>
-              <option value="North">North</option>
-              <option value="South">South</option>
+              <option value="">All States</option>
+              {regions.map(r => (
+                <option key={r.code} value={r.code}>{r.code} — {r.name}</option>
+              ))}
             </select>
           </div>
           <div>
