@@ -206,14 +206,21 @@ function LiveView({ isAdmin }) {
   );
 }
 
-function Reports() {
+function Reports({ isAdmin }) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [supervisorId, setSupervisorId] = useState('');
   const [repId, setRepId] = useState('');
   const [region, setRegion] = useState('');
   const [category, setCategory] = useState('');
   const [groupBy, setGroupBy] = useState('rep');
   const [generated, setGenerated] = useState(false);
+
+  const { data: supervisors = [] } = useQuery({
+    queryKey: ['supervisors'],
+    queryFn: () => api.get('/api/users/supervisors').then(r => r.data.data),
+    enabled: isAdmin,
+  });
 
   const { data: reps = [] } = useQuery({
     queryKey: ['reps-list'],
@@ -221,10 +228,17 @@ function Reports() {
   });
 
   const { data = [], isLoading, refetch } = useQuery({
-    queryKey: ['report-checkins', startDate, endDate, repId, region, category],
+    queryKey: ['report-checkins', startDate, endDate, supervisorId, repId, region, category],
     queryFn: () => {
       const q = new URLSearchParams(Object.fromEntries(
-        Object.entries({ start_date: startDate, end_date: endDate, rep_id: repId, region, category }).filter(([, v]) => v)
+        Object.entries({
+          start_date: startDate,
+          end_date: endDate,
+          rep_id: repId,
+          region,
+          category,
+          ...(isAdmin && supervisorId ? { filter_supervisor_id: supervisorId } : {}),
+        }).filter(([, v]) => v)
       ));
       return api.get(`/api/checkins/all?${q}`).then(r => r.data.data);
     },
@@ -253,12 +267,14 @@ function Reports() {
 
   function exportCsv() {
     const selectedRep = reps.find(r => String(r.id) === String(repId));
+    const selectedSup = supervisors.find(s => String(s.id) === String(supervisorId));
     const parts = [
-      selectedRep ? selectedRep.name.replace(/\s+/g, '-') : 'all-reps',
+      isAdmin && selectedSup ? selectedSup.name.replace(/\s+/g, '-') : null,
+      selectedRep ? selectedRep.name.replace(/\s+/g, '-') : (!selectedSup ? 'all-reps' : null),
       region || null,
       category || null,
     ].filter(Boolean);
-    const repLabel = parts.join('-');
+    const label = parts.length ? parts.join('-') : 'global';
     const rows = [
       ['Rep Name', 'Region', 'Category', 'Business Name', 'Contact Name', 'Contact Email', 'Contact Phone', 'Address', 'Latitude', 'Longitude', 'Maps URL', 'Date', 'Time', 'GPS Accuracy', 'Notes'],
       ...data.map(c => [
@@ -282,7 +298,7 @@ function Reports() {
     } else {
       const a = document.createElement('a');
       a.href = url;
-      a.download = `checkins-${repLabel}-${startDate}-to-${endDate}.csv`;
+      a.download = `checkins-${label}-${startDate}-to-${endDate}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -292,6 +308,22 @@ function Reports() {
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+          {/* Admin-only: Team / Supervisor filter */}
+          {isAdmin && (
+            <div className="sm:col-span-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Team / Supervisor</label>
+              <select
+                value={supervisorId}
+                onChange={e => { setSupervisorId(e.target.value); setRepId(''); }}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Teams (Global Report)</option>
+                {supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rep</label>
             <select
@@ -371,10 +403,17 @@ function Reports() {
         </div>
       </div>
 
+      {generated && data.length === 0 && (
+        <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
+          <MapPin size={36} className="mx-auto mb-2 opacity-40" />
+          <p>No check-ins found for the selected filters and date range</p>
+        </div>
+      )}
+
       {generated && data.length > 0 && (
         <>
           <div className="flex justify-between items-center">
-            <p className="text-sm text-gray-600 font-medium">{data.length} check-in(s) found</p>
+            <p className="text-sm text-gray-600 font-medium">{data.length} check-in{data.length !== 1 ? 's' : ''} found</p>
             <button
               onClick={exportCsv}
               className="flex items-center gap-1.5 text-sm text-green-700 hover:text-green-900 font-medium border border-green-300 px-3 py-1.5 rounded-lg hover:bg-green-50 transition-colors"
@@ -384,78 +423,117 @@ function Reports() {
             </button>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Group</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Check-ins</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Unique Locations</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {grouped.map(g => (
-                  <>
-                    <tr
-                      key={g.name}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => setExpandedGroup(prev => prev === g.name ? null : g.name)}
-                    >
-                      <td className="px-4 py-3 font-medium">{g.name || '(none)'}</td>
-                      <td className="px-4 py-3">{g.checkins.length}</td>
-                      <td className="px-4 py-3">{g.locations.size}</td>
-                      <td className="px-4 py-3 text-gray-400">
-                        {expandedGroup === g.name ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                      </td>
-                    </tr>
-                    {expandedGroup === g.name && (
-                      <tr key={`${g.name}-detail`}>
-                        <td colSpan={4} className="px-4 py-3 bg-gray-50">
-                          <table className="w-full text-xs">
-                            <thead>
-                              <tr className="text-gray-500">
-                                <th className="text-left pb-2">Time</th>
-                                <th className="text-left pb-2">Business</th>
-                                <th className="text-left pb-2">Contact</th>
-                                <th className="text-left pb-2">Address</th>
-                                <th className="text-left pb-2">Maps</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                              {g.checkins.map(c => (
-                                <tr key={c.id}>
-                                  <td className="py-1.5 pr-3 whitespace-nowrap">
-                                    {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}
-                                  </td>
-                                  <td className="py-1.5 pr-3">{c.location_name}</td>
-                                  <td className="py-1.5 pr-3">{c.contact_name}</td>
-                                  <td className="py-1.5 pr-3 max-w-[160px] truncate">{c.address_resolved || '—'}</td>
-                                  <td className="py-1.5">
-                                    {c.google_maps_url
-                                      ? <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="text-blue-500"><ExternalLink size={12} /></a>
-                                      : '—'}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+          {/* Summary Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">Summary</h3>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Group</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Check-ins</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Unique Locations</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {grouped.map(g => (
+                    <>
+                      <tr
+                        key={g.name}
+                        className="hover:bg-gray-50 cursor-pointer"
+                        onClick={() => setExpandedGroup(prev => prev === g.name ? null : g.name)}
+                      >
+                        <td className="px-4 py-3 font-medium">{g.name || '(none)'}</td>
+                        <td className="px-4 py-3">{g.checkins.length}</td>
+                        <td className="px-4 py-3">{g.locations.size}</td>
+                        <td className="px-4 py-3 text-gray-400">
+                          {expandedGroup === g.name ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </td>
                       </tr>
-                    )}
-                  </>
-                ))}
-              </tbody>
-            </table>
+                      {expandedGroup === g.name && (
+                        <tr key={`${g.name}-detail`}>
+                          <td colSpan={4} className="px-4 py-3 bg-gray-50">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-gray-500">
+                                  <th className="text-left pb-2">Time</th>
+                                  <th className="text-left pb-2">Business</th>
+                                  <th className="text-left pb-2">Contact</th>
+                                  <th className="text-left pb-2">Address</th>
+                                  <th className="text-left pb-2">Maps</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100">
+                                {g.checkins.map(c => (
+                                  <tr key={c.id}>
+                                    <td className="py-1.5 pr-3 whitespace-nowrap">
+                                      {c.checked_in_at ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) : '—'}
+                                    </td>
+                                    <td className="py-1.5 pr-3">{c.location_name}</td>
+                                    <td className="py-1.5 pr-3">{c.contact_name}</td>
+                                    <td className="py-1.5 pr-3 max-w-[160px] truncate">{c.address_resolved || '—'}</td>
+                                    <td className="py-1.5">
+                                      {c.google_maps_url
+                                        ? <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="text-blue-500"><ExternalLink size={12} /></a>
+                                        : '—'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Detailed Section */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">Detailed</h3>
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+              <table className="w-full text-sm whitespace-nowrap">
+                <thead className="bg-gray-50 border-b">
+                  <tr>
+                    {['Rep', 'Date / Time', 'Business', 'Contact', 'Email', 'Phone', 'Address', 'Notes', 'Maps'].map(h => (
+                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.map(c => (
+                    <tr key={c.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2.5 font-medium text-gray-900">
+                        <div>{c.rep_name}</div>
+                        {c.region && <div className="text-xs text-gray-400">{c.region}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-600 text-xs">
+                        {c.checked_in_at
+                          ? formatTz(c.checked_in_at, c.timezone, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2.5 text-gray-700 max-w-[140px] truncate">{c.location_name || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-700">{c.contact_name || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">{c.contact_email || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs">{c.contact_phone || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[180px] truncate">{c.address_resolved || '—'}</td>
+                      <td className="px-3 py-2.5 text-gray-500 text-xs max-w-[140px] truncate">{c.notes || '—'}</td>
+                      <td className="px-3 py-2.5">
+                        {c.google_maps_url
+                          ? <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-700"><ExternalLink size={13} /></a>
+                          : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </>
-      )}
-
-      {generated && data.length === 0 && (
-        <div className="text-center py-12 text-gray-400 bg-white rounded-xl border border-gray-100">
-          <MapPin size={36} className="mx-auto mb-2 opacity-40" />
-          <p>No check-ins found for the selected date range</p>
-        </div>
       )}
     </div>
   );
@@ -595,7 +673,7 @@ export default function SupervisorDashboard() {
         </div>
 
         {tab === 0 && <LiveView isAdmin={isAdmin} />}
-        {tab === 1 && <Reports />}
+        {tab === 1 && <Reports isAdmin={isAdmin} />}
         {tab === 2 && <Team currentUser={user} />}
       </div>
     </div>

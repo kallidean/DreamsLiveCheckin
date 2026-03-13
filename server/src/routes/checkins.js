@@ -202,15 +202,18 @@ router.get('/my', requireAuth, async (req, res) => {
 
 // GET /api/checkins/all
 router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, res) => {
-  const { rep_id, region, category, start_date, end_date } = req.query;
+  const { rep_id, region, category, start_date, end_date, filter_supervisor_id } = req.query;
   const isSupervisor = req.user.role === 'supervisor';
+
+  // scopeSupervisorId: supervisors always scope to themselves;
+  // admins can optionally scope to a specific supervisor's team
+  const scopeSupervisorId = isSupervisor ? req.user.id : (filter_supervisor_id || null);
 
   const conditions = [];
   const params = [];
 
-  // Supervisors: scope to their team subtree via recursive CTE
-  if (isSupervisor) {
-    params.push(req.user.id); // $1
+  if (scopeSupervisorId) {
+    params.push(scopeSupervisorId); // $1
   }
 
   if (rep_id) {
@@ -236,7 +239,7 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
 
   try {
     let queryText;
-    if (isSupervisor) {
+    if (scopeSupervisorId) {
       const extraWhere = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
       queryText = `
         WITH RECURSIVE subordinates AS (
