@@ -1,80 +1,18 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Save, Trash2, UserPlus, Eye, UserX, UserCheck } from 'lucide-react';
+import { CheckCircle, XCircle, Save, UserPlus, UserX, UserCheck, Search } from 'lucide-react';
 import api from '../../lib/axios';
 import Navbar from '../../components/Navbar';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 
-function CheckinsModal({ user, onClose }) {
+function AddUserModal({ onClose, supervisors, defaultSupervisorId }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
-
-  const { data: checkins, isLoading } = useQuery({
-    queryKey: ['user-checkins', user.id],
-    queryFn: () => api.get(`/api/users/${user.id}/checkins`).then(r => r.data.data),
+  const [form, setForm] = useState({
+    name: '', email: '', password: '', phone: '',
+    role: 'rep', region: '', supervisor_id: defaultSupervisorId || '',
   });
-
-  const deleteMutation = useMutation({
-    mutationFn: (checkinId) => api.delete(`/api/checkins/${checkinId}`).then(r => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-checkins', user.id] });
-      addToast('Check-in deleted', 'success');
-    },
-    onError: (err) => {
-      addToast(err.response?.data?.error || 'Failed to delete check-in', 'error');
-    },
-  });
-
-  return (
-    <Modal isOpen onClose={onClose} title={`Check-ins — ${user.name}`}>
-      {isLoading && (
-        <div className="flex justify-center py-8">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600" />
-        </div>
-      )}
-      {!isLoading && checkins?.length === 0 && (
-        <p className="text-center text-gray-400 py-8">No check-ins found</p>
-      )}
-      <div className="space-y-3">
-        {checkins?.map(c => (
-          <div key={c.id} className="border border-gray-100 rounded-lg p-3">
-            <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="font-medium text-sm text-gray-900">{c.location_name || 'Unknown location'}</p>
-                <p className="text-xs text-gray-500">{new Date(c.checked_in_at).toLocaleString()}</p>
-                {c.contact_name && <p className="text-xs text-gray-500">Contact: {c.contact_name}</p>}
-                {c.address_resolved && <p className="text-xs text-gray-400 truncate">{c.address_resolved}</p>}
-                {c.google_maps_url && (
-                  <a href={c.google_maps_url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline">
-                    View on Maps
-                  </a>
-                )}
-              </div>
-              <button
-                onClick={() => {
-                  if (window.confirm('Delete this check-in?')) deleteMutation.mutate(c.id);
-                }}
-                disabled={deleteMutation.isPending}
-                className="text-red-400 hover:text-red-600 transition-colors shrink-0"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-            {c.photo_url && (
-              <img src={c.photo_url} alt="Check-in" className="mt-2 rounded w-full max-h-40 object-cover" />
-            )}
-          </div>
-        ))}
-      </div>
-    </Modal>
-  );
-}
-
-function AddUserModal({ onClose, supervisors }) {
-  const queryClient = useQueryClient();
-  const { addToast } = useToast();
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'rep', region: '', category: '', supervisor_id: '' });
   const [error, setError] = useState('');
 
   const mutation = useMutation({
@@ -155,19 +93,11 @@ function AddUserModal({ onClose, supervisors }) {
               <option value="admin">admin</option>
             </select>
           </div>
-          <div>
+          <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
             <input
               value={form.region}
               onChange={e => setForm(p => ({ ...p, region: e.target.value }))}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-            <input
-              value={form.category}
-              onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -204,6 +134,21 @@ function AddUserModal({ onClose, supervisors }) {
   );
 }
 
+// Shared column widths — used in both the header row and each UserRow
+const cellCls = {
+  name:       'md:w-32 md:shrink-0',
+  email:      'md:w-40 md:shrink-0',
+  phone:      'md:w-24 md:shrink-0',
+  role:       'md:w-20 md:shrink-0',
+  region:     'md:w-20 md:shrink-0',
+  supervisor: 'md:w-32 md:shrink-0',
+  verified:   'md:w-20 md:shrink-0',
+  save:       'md:w-16 md:shrink-0',
+  status:     'md:flex-1',
+};
+
+const inputCls = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
+
 function UserRow({ user, supervisors }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
@@ -213,12 +158,10 @@ function UserRow({ user, supervisors }) {
     role: user.role,
     phone: user.phone || '',
     region: user.region || '',
-    category: user.category || '',
     verified: user.verified,
     active: user.active !== false,
     supervisor_id: user.supervisor_id || '',
   });
-  const [showCheckins, setShowCheckins] = useState(false);
 
   const updateMutation = useMutation({
     mutationFn: (data) => api.patch(`/api/users/${user.id}`, data).then(r => r.data),
@@ -240,123 +183,126 @@ function UserRow({ user, supervisors }) {
   }
 
   function handleSave() {
-    updateMutation.mutate({
-      ...edits,
-      supervisor_id: edits.supervisor_id || null,
-    });
+    updateMutation.mutate({ ...edits, supervisor_id: edits.supervisor_id || null });
   }
 
   return (
-    <>
-      <tr className={`hover:bg-gray-50 ${!edits.active ? 'opacity-50' : ''}`}>
-        <td className="px-4 py-3">
+    <div className={`border-b border-gray-100 px-3 py-3 last:border-b-0 ${!edits.active ? 'opacity-50' : 'hover:bg-gray-50'}`}>
+      {/* Mobile: 3-col grid  |  Desktop: single flex row */}
+      <div className="grid grid-cols-3 gap-2 md:flex md:flex-nowrap md:items-center md:gap-2">
+
+        <div className={`flex flex-col ${cellCls.name}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Name</span>
           <input
             value={edits.name}
             onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
-            className="block border border-gray-300 rounded-lg px-2 py-1 text-sm w-44 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
             placeholder="Name"
           />
+        </div>
+
+        <div className={`flex flex-col ${cellCls.email}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Email</span>
           <input
             type="email"
             value={edits.email}
             onChange={e => setEdits(p => ({ ...p, email: e.target.value }))}
-            className="block border border-gray-300 rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
+            className={inputCls}
           />
-          <select
-            value={edits.supervisor_id}
-            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
-            className="block border border-gray-300 rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1 text-gray-600"
-          >
-            <option value="">No Supervisor</option>
-            {supervisors.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
-          {!edits.active && <div className="text-xs text-red-500 font-medium mt-1">Disabled</div>}
-        </td>
-        <td className="px-4 py-3">
+        </div>
+
+        <div className={`flex flex-col ${cellCls.phone}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Phone</span>
           <input
             value={edits.phone}
             onChange={e => setEdits(p => ({ ...p, phone: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-32 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
             placeholder="Phone"
           />
-        </td>
-        <td className="px-4 py-3">
+        </div>
+
+        <div className={`flex flex-col ${cellCls.role}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Role</span>
           <select
             value={edits.role}
             onChange={e => setEdits(p => ({ ...p, role: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
           >
             <option value="rep">rep</option>
             <option value="supervisor">supervisor</option>
             <option value="admin">admin</option>
           </select>
-        </td>
-        <td className="px-4 py-3">
+        </div>
+
+        <div className={`flex flex-col ${cellCls.region}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Region</span>
           <input
             value={edits.region}
             onChange={e => setEdits(p => ({ ...p, region: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={inputCls}
             placeholder="Region"
           />
-        </td>
-        <td className="px-4 py-3">
-          <input
-            value={edits.category}
-            onChange={e => setEdits(p => ({ ...p, category: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Category"
-          />
-        </td>
-        <td className="px-4 py-3">
+        </div>
+
+        <div className={`flex flex-col ${cellCls.supervisor}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Supervisor</span>
+          <select
+            value={edits.supervisor_id}
+            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
+            className={inputCls}
+          >
+            <option value="">— None —</option>
+            {supervisors.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className={`flex flex-col justify-center ${cellCls.verified}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Verified</span>
           <button
             onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
             className={`flex items-center gap-1 text-sm font-medium transition-colors ${
               edits.verified ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            {edits.verified
-              ? <><CheckCircle size={16} /> Verified</>
-              : <><XCircle size={16} /> Unverified</>
-            }
+            {edits.verified ? <><CheckCircle size={14} /> Verified</> : <><XCircle size={14} /> No</>}
           </button>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleSave}
-              disabled={updateMutation.isPending}
-              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
-            >
-              <Save size={14} />
-              {updateMutation.isPending ? 'Saving…' : 'Save'}
-            </button>
-            <button
-              onClick={() => setShowCheckins(true)}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
-            >
-              <Eye size={14} />
-              Check-ins
-            </button>
-            <button
-              onClick={handleToggleActive}
-              className={`flex items-center gap-1 text-sm font-medium ${
-                edits.active ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'
-              }`}
-            >
-              {edits.active ? <><UserX size={14} /> Disable</> : <><UserCheck size={14} /> Enable</>}
-            </button>
-          </div>
-        </td>
-      </tr>
-      {showCheckins && <CheckinsModal user={user} onClose={() => setShowCheckins(false)} />}
-    </>
+        </div>
+
+        <div className={`flex flex-col justify-center ${cellCls.save}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Save</span>
+          <button
+            onClick={handleSave}
+            disabled={updateMutation.isPending}
+            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
+          >
+            <Save size={14} />
+            {updateMutation.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+
+        <div className={`flex flex-col justify-center ${cellCls.status}`}>
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Status</span>
+          <button
+            onClick={handleToggleActive}
+            className={`flex items-center gap-1 text-sm font-medium ${
+              edits.active ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'
+            }`}
+          >
+            {edits.active ? <><UserX size={14} /> Disable</> : <><UserCheck size={14} /> Enable</>}
+          </button>
+        </div>
+
+      </div>
+    </div>
   );
 }
 
 export default function UserManagement() {
   const [showAddUser, setShowAddUser] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterSupervisorId, setFilterSupervisorId] = useState('');
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -368,11 +314,29 @@ export default function UserManagement() {
     queryFn: () => api.get('/api/users/supervisors').then(r => r.data.data),
   });
 
+  const filteredUsers = useMemo(() => {
+    if (!data) return [];
+    let result = data;
+    if (filterSupervisorId) {
+      result = result.filter(u => u.supervisor_id === filterSupervisorId);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      result = result.filter(u =>
+        u.name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.phone?.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [data, filterSupervisorId, searchQuery]);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-6">
+
+        <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-gray-900">User Management</h1>
           <button
             onClick={() => setShowAddUser(true)}
@@ -383,38 +347,66 @@ export default function UserManagement() {
           </button>
         </div>
 
+        {/* Search + supervisor filter */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search by name, email, or phone…"
+              className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <select
+            value={filterSupervisorId}
+            onChange={e => setFilterSupervisorId(e.target.value)}
+            className="sm:w-52 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Supervisors</option>
+            {supervisors.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+
         {isLoading && (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
           </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  {['Name / Email / Supervisor', 'Phone', 'Role', 'Region', 'Category', 'Verified', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {data?.map(user => (
-                  <UserRow key={user.id} user={user} supervisors={supervisors} />
-                ))}
-                {!isLoading && (!data || data.length === 0) && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No users found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+          {/* Column header — desktop only */}
+          <div className="hidden md:flex md:flex-nowrap md:items-center md:gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            <div className={cellCls.name}>Name</div>
+            <div className={cellCls.email}>Email</div>
+            <div className={cellCls.phone}>Phone</div>
+            <div className={cellCls.role}>Role</div>
+            <div className={cellCls.region}>Region</div>
+            <div className={cellCls.supervisor}>Supervisor</div>
+            <div className={cellCls.verified}>Verified</div>
+            <div className={cellCls.save}>Save</div>
+            <div className={cellCls.status}>Status</div>
           </div>
+
+          {filteredUsers.map(user => (
+            <UserRow key={user.id} user={user} supervisors={supervisors} />
+          ))}
+          {!isLoading && filteredUsers.length === 0 && (
+            <div className="px-4 py-8 text-center text-gray-400">No users found</div>
+          )}
         </div>
+
       </div>
 
-      {showAddUser && <AddUserModal onClose={() => setShowAddUser(false)} supervisors={supervisors} />}
+      {showAddUser && (
+        <AddUserModal
+          onClose={() => setShowAddUser(false)}
+          supervisors={supervisors}
+          defaultSupervisorId={filterSupervisorId}
+        />
+      )}
     </div>
   );
 }
