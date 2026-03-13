@@ -71,10 +71,10 @@ function CheckinsModal({ user, onClose }) {
   );
 }
 
-function AddUserModal({ onClose }) {
+function AddUserModal({ onClose, supervisors }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
-  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'rep', region: '', category: '' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', phone: '', role: 'rep', region: '', category: '', supervisor_id: '' });
   const [error, setError] = useState('');
 
   const mutation = useMutation({
@@ -92,7 +92,11 @@ function AddUserModal({ onClose }) {
   function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    mutation.mutate(form);
+    if (form.role === 'rep' && !form.supervisor_id) {
+      setError('A supervisor is required for reps.');
+      return;
+    }
+    mutation.mutate({ ...form, supervisor_id: form.supervisor_id || null });
   }
 
   return (
@@ -167,6 +171,21 @@ function AddUserModal({ onClose }) {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-gray-700 mb-1">
+              Supervisor {form.role === 'rep' ? '*' : '(optional)'}
+            </label>
+            <select
+              value={form.supervisor_id}
+              onChange={e => setForm(p => ({ ...p, supervisor_id: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">— None —</option>
+              {supervisors.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">
@@ -185,7 +204,7 @@ function AddUserModal({ onClose }) {
   );
 }
 
-function UserRow({ user }) {
+function UserRow({ user, supervisors }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [edits, setEdits] = useState({
@@ -196,6 +215,7 @@ function UserRow({ user }) {
     category: user.category || '',
     verified: user.verified,
     active: user.active !== false,
+    supervisor_id: user.supervisor_id || '',
   });
   const [showCheckins, setShowCheckins] = useState(false);
 
@@ -203,6 +223,7 @@ function UserRow({ user }) {
     mutationFn: (data) => api.patch(`/api/users/${user.id}`, data).then(r => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['supervisors'] });
       addToast(`${user.name} updated successfully`, 'success');
     },
     onError: (err) => {
@@ -215,6 +236,13 @@ function UserRow({ user }) {
     if (window.confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${user.name}?`)) {
       setEdits(p => ({ ...p, active: !p.active }));
     }
+  }
+
+  function handleSave() {
+    updateMutation.mutate({
+      ...edits,
+      supervisor_id: edits.supervisor_id || null,
+    });
   }
 
   return (
@@ -266,6 +294,18 @@ function UserRow({ user }) {
           />
         </td>
         <td className="px-4 py-3">
+          <select
+            value={edits.supervisor_id}
+            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">— None —</option>
+            {supervisors.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+        </td>
+        <td className="px-4 py-3">
           <button
             onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
             className={`flex items-center gap-1 text-sm font-medium transition-colors ${
@@ -281,7 +321,7 @@ function UserRow({ user }) {
         <td className="px-4 py-3">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => updateMutation.mutate(edits)}
+              onClick={handleSave}
               disabled={updateMutation.isPending}
               className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
             >
@@ -319,10 +359,15 @@ export default function UserManagement() {
     queryFn: () => api.get('/api/users').then(r => r.data.data),
   });
 
+  const { data: supervisors = [] } = useQuery({
+    queryKey: ['supervisors'],
+    queryFn: () => api.get('/api/users/supervisors').then(r => r.data.data),
+  });
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold text-gray-900">User Management</h1>
           <button
@@ -345,18 +390,18 @@ export default function UserManagement() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {['Name / Email', 'Phone', 'Role', 'Region', 'Category', 'Verified', 'Actions'].map(h => (
+                  {['Name / Email', 'Phone', 'Role', 'Region', 'Category', 'Supervisor', 'Verified', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {data?.map(user => (
-                  <UserRow key={user.id} user={user} />
+                  <UserRow key={user.id} user={user} supervisors={supervisors} />
                 ))}
                 {!isLoading && (!data || data.length === 0) && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No users found</td>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400">No users found</td>
                   </tr>
                 )}
               </tbody>
@@ -365,7 +410,7 @@ export default function UserManagement() {
         </div>
       </div>
 
-      {showAddUser && <AddUserModal onClose={() => setShowAddUser(false)} />}
+      {showAddUser && <AddUserModal onClose={() => setShowAddUser(false)} supervisors={supervisors} />}
     </div>
   );
 }

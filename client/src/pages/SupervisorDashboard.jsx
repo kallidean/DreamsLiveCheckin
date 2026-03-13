@@ -12,7 +12,7 @@ import api from '../lib/axios';
 import Navbar from '../components/Navbar';
 import { useAuth } from '../context/AuthContext';
 
-const TABS = ['Live View', 'Reports'];
+const TABS = ['Live View', 'Reports', 'Team'];
 
 function useAllCheckins(params) {
   return useQuery({
@@ -461,6 +461,105 @@ function Reports() {
   );
 }
 
+function OrgTreeNode({ user, childrenMap, depth }) {
+  const children = childrenMap[user.id] || [];
+  return (
+    <div className={depth > 0 ? 'ml-5 border-l-2 border-gray-100 pl-3' : ''}>
+      <div className="flex items-center gap-2 py-1.5">
+        <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+          user.role === 'supervisor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+        }`}>
+          {user.role === 'supervisor' ? 'Sup' : 'Rep'}
+        </span>
+        <span className={`text-sm text-gray-900 ${!user.active ? 'line-through text-gray-400' : ''}`}>{user.name}</span>
+        {user.region && <span className="text-xs text-gray-400">· {user.region}</span>}
+        {!user.active && <span className="text-xs text-red-400 font-medium">Disabled</span>}
+      </div>
+      {children.map(child => (
+        <OrgTreeNode key={child.id} user={child} childrenMap={childrenMap} depth={depth + 1} />
+      ))}
+    </div>
+  );
+}
+
+function Team({ currentUser }) {
+  const isAdmin = currentUser?.role === 'admin';
+
+  const { data: teamMembers = [], isLoading } = useQuery({
+    queryKey: ['team'],
+    queryFn: () => api.get('/api/users/team').then(r => r.data.data),
+  });
+
+  const childrenMap = useMemo(() => {
+    const map = {};
+    for (const u of teamMembers) {
+      const pid = u.supervisor_id || '__root__';
+      if (!map[pid]) map[pid] = [];
+      map[pid].push(u);
+    }
+    return map;
+  }, [teamMembers]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    );
+  }
+
+  // For supervisors: root is current user, their direct/indirect reports populate the tree
+  // For admins: top-level nodes are supervisors with no supervisor_id
+  const rootNodes = isAdmin
+    ? (childrenMap['__root__'] || []).filter(u => u.role === 'supervisor')
+    : (childrenMap[currentUser?.id] || []);
+
+  const unassigned = isAdmin
+    ? (childrenMap['__root__'] || []).filter(u => u.role === 'rep')
+    : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        {!isAdmin && (
+          <div className="mb-3 pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-2">
+              <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-purple-100 text-purple-700">Sup</span>
+              <span className="font-semibold text-gray-900">{currentUser?.name} (You)</span>
+            </div>
+          </div>
+        )}
+
+        {rootNodes.length === 0 && unassigned.length === 0 ? (
+          <p className="text-center text-gray-400 text-sm py-8">
+            {isAdmin ? 'No org structure defined yet' : 'No team members assigned yet'}
+          </p>
+        ) : (
+          <>
+            {rootNodes.map(node => (
+              <OrgTreeNode key={node.id} user={node} childrenMap={childrenMap} depth={0} />
+            ))}
+          </>
+        )}
+      </div>
+
+      {unassigned.length > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Unassigned Reps</p>
+          {unassigned.map(u => (
+            <div key={u.id} className="flex items-center gap-2 py-1.5">
+              <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700">Rep</span>
+              <span className={`text-sm text-gray-900 ${!u.active ? 'line-through text-gray-400' : ''}`}>{u.name}</span>
+              {u.region && <span className="text-xs text-gray-400">· {u.region}</span>}
+              {!u.active && <span className="text-xs text-red-400 font-medium">Disabled</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SupervisorDashboard() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -497,6 +596,7 @@ export default function SupervisorDashboard() {
 
         {tab === 0 && <LiveView isAdmin={isAdmin} />}
         {tab === 1 && <Reports />}
+        {tab === 2 && <Team currentUser={user} />}
       </div>
     </div>
   );

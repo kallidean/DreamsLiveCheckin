@@ -203,9 +203,15 @@ router.get('/my', requireAuth, async (req, res) => {
 // GET /api/checkins/all
 router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, res) => {
   const { rep_id, region, category, start_date, end_date } = req.query;
+  const isSupervisor = req.user.role === 'supervisor';
 
   const conditions = [];
   const params = [];
+
+  // Supervisors: scope to their team subtree via recursive CTE
+  if (isSupervisor) {
+    params.push(req.user.id); // $1
+  }
 
   if (rep_id) {
     params.push(rep_id);
@@ -228,19 +234,37 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
     conditions.push(`c.checked_in_at <= $${params.length}::date + interval '1 day'`);
   }
 
-  const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
   try {
-    const { rows } = await pool.query(
-      `SELECT c.*, u.name as rep_name, u.email as rep_email, u.region, u.category,
-              l.name as location_name, l.address as location_address, l.google_maps_url
-       FROM checkins c
-       LEFT JOIN users u ON u.id = c.user_id
-       LEFT JOIN locations l ON l.id = c.location_id
-       ${where}
-       ORDER BY c.checked_in_at DESC`,
-      params
-    );
+    let queryText;
+    if (isSupervisor) {
+      const extraWhere = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+      queryText = `
+        WITH RECURSIVE subordinates AS (
+          SELECT id FROM users WHERE supervisor_id = $1
+          UNION ALL
+          SELECT u.id FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
+        )
+        SELECT c.*, u.name as rep_name, u.email as rep_email, u.region, u.category,
+               l.name as location_name, l.address as location_address, l.google_maps_url
+        FROM checkins c
+        LEFT JOIN users u ON u.id = c.user_id
+        LEFT JOIN locations l ON l.id = c.location_id
+        WHERE c.user_id IN (SELECT id FROM subordinates)
+        ${extraWhere}
+        ORDER BY c.checked_in_at DESC`;
+    } else {
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      queryText = `
+        SELECT c.*, u.name as rep_name, u.email as rep_email, u.region, u.category,
+               l.name as location_name, l.address as location_address, l.google_maps_url
+        FROM checkins c
+        LEFT JOIN users u ON u.id = c.user_id
+        LEFT JOIN locations l ON l.id = c.location_id
+        ${where}
+        ORDER BY c.checked_in_at DESC`;
+    }
+
+    const { rows } = await pool.query(queryText, params);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error(err);
