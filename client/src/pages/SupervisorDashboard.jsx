@@ -32,11 +32,30 @@ function PhotoThumb({ url }) {
   );
 }
 
+function SortTh({ label, field, sortField, sortDir, onSort, className = '' }) {
+  const active = sortField === field;
+  return (
+    <th
+      className={`px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide cursor-pointer select-none hover:bg-gray-100 transition-colors ${className}`}
+      onClick={() => onSort(field)}
+    >
+      <span className="flex items-center gap-1">
+        {label}
+        {active
+          ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+          : <ChevronUp size={12} className="opacity-20" />}
+      </span>
+    </th>
+  );
+}
+
 function LiveView({ isAdmin }) {
   const queryClient = useQueryClient();
   const [supervisorId, setSupervisorId] = useState('');
   const [filters, setFilters] = useState({ rep_id: '', region: '', category: '', start_date: '', end_date: '' });
   const [expanded, setExpanded] = useState(null);
+  const [sortField, setSortField] = useState('rep_name');
+  const [sortDir, setSortDir] = useState('asc');
 
   const checkinsParams = { ...filters, ...(supervisorId ? { filter_supervisor_id: supervisorId } : {}) };
   const { data = [], isLoading, refetch, isFetching } = useAllCheckins(checkinsParams);
@@ -74,6 +93,27 @@ function LiveView({ isAdmin }) {
   function toggleRow(id) {
     setExpanded(prev => (prev === id ? null : id));
   }
+
+  function handleSort(field) {
+    if (field === sortField) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
+
+  const sortedData = useMemo(() => {
+    if (!data.length) return data;
+    return [...data].sort((a, b) => {
+      const av = String(a[sortField] ?? '').toLowerCase();
+      const bv = String(b[sortField] ?? '').toLowerCase();
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, sortField, sortDir]);
+
+  const sortProps = { sortField, sortDir, onSort: handleSort };
 
   return (
     <div className="space-y-4">
@@ -150,13 +190,19 @@ function LiveView({ isAdmin }) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-100">
               <tr>
-                {['Rep', 'Business', 'Contact', 'Address', 'Time', 'Accuracy', 'Maps', 'Photo', ...(isAdmin ? ['Delete'] : [])].map(h => (
-                  <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
-                ))}
+                <SortTh label="Rep" field="rep_name" {...sortProps} />
+                <SortTh label="Business" field="location_name" {...sortProps} />
+                <SortTh label="Contact" field="contact_name" {...sortProps} />
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>
+                <SortTh label="Time" field="checked_in_at" {...sortProps} />
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Accuracy</th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Maps</th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Photo</th>
+                {isAdmin && <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Delete</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {data.map(c => (
+              {sortedData.map(c => (
                 <>
                   <tr
                     key={c.id}
@@ -249,6 +295,10 @@ function Reports({ isAdmin }) {
   const [category, setCategory] = useState('');
   const [groupBy, setGroupBy] = useState('rep');
   const [generated, setGenerated] = useState(false);
+  const [sortSummaryField, setSortSummaryField] = useState('name');
+  const [sortSummaryDir, setSortSummaryDir] = useState('asc');
+  const [sortDetailField, setSortDetailField] = useState('rep_name');
+  const [sortDetailDir, setSortDetailDir] = useState('asc');
 
   const { data: supervisors = [] } = useQuery({
     queryKey: ['supervisors'],
@@ -299,13 +349,56 @@ function Reports({ isAdmin }) {
       map[key].checkins.push(c);
       if (c.location_name) map[key].locations.add(c.location_name);
     }
-    return Object.values(map).sort((a, b) => b.checkins.length - a.checkins.length);
-  }, [data, groupBy]);
+    const groups = Object.values(map);
+    return [...groups].sort((a, b) => {
+      let av, bv;
+      if (sortSummaryField === 'name') {
+        av = String(a.name ?? '').toLowerCase();
+        bv = String(b.name ?? '').toLowerCase();
+      } else if (sortSummaryField === 'checkins') {
+        av = a.checkins.length;
+        bv = b.checkins.length;
+      } else {
+        av = a.locations.size;
+        bv = b.locations.size;
+      }
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortSummaryDir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, groupBy, sortSummaryField, sortSummaryDir]);
+
+  const sortedDetailData = useMemo(() => {
+    if (!data.length) return data;
+    return [...data].sort((a, b) => {
+      const av = String(a[sortDetailField] ?? '').toLowerCase();
+      const bv = String(b[sortDetailField] ?? '').toLowerCase();
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      return sortDetailDir === 'asc' ? cmp : -cmp;
+    });
+  }, [data, sortDetailField, sortDetailDir]);
 
   function handleGenerate() {
     if (!startDate || !endDate) return;
     setGenerated(false);
     refetch().then(() => setGenerated(true));
+  }
+
+  function handleSortSummary(field) {
+    if (field === sortSummaryField) {
+      setSortSummaryDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortSummaryField(field);
+      setSortSummaryDir('asc');
+    }
+  }
+
+  function handleSortDetail(field) {
+    if (field === sortDetailField) {
+      setSortDetailDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortDetailField(field);
+      setSortDetailDir('asc');
+    }
   }
 
   function exportCsv() {
@@ -346,6 +439,9 @@ function Reports({ isAdmin }) {
       URL.revokeObjectURL(url);
     }
   }
+
+  const summaryProps = { sortField: sortSummaryField, sortDir: sortSummaryDir, onSort: handleSortSummary };
+  const detailProps = { sortField: sortDetailField, sortDir: sortDetailDir, onSort: handleSortDetail };
 
   return (
     <div className="space-y-4">
@@ -474,9 +570,9 @@ function Reports({ isAdmin }) {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Group</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Check-ins</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Unique Locations</th>
+                    <SortTh label="Group" field="name" {...summaryProps} />
+                    <SortTh label="Check-ins" field="checkins" {...summaryProps} />
+                    <SortTh label="Unique Locations" field="locations" {...summaryProps} />
                     <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
@@ -543,13 +639,19 @@ function Reports({ isAdmin }) {
               <table className="w-full text-sm whitespace-nowrap">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    {['Rep', 'Date / Time', 'Business', 'Contact', 'Email', 'Phone', 'Address', 'Notes', 'Maps'].map(h => (
-                      <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
-                    ))}
+                    <SortTh label="Rep" field="rep_name" {...detailProps} />
+                    <SortTh label="Date / Time" field="checked_in_at" {...detailProps} />
+                    <SortTh label="Business" field="location_name" {...detailProps} />
+                    <SortTh label="Contact" field="contact_name" {...detailProps} />
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Email</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Phone</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Address</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Notes</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">Maps</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {data.map(c => (
+                  {sortedDetailData.map(c => (
                     <tr key={c.id} className="hover:bg-gray-50">
                       <td className="px-3 py-2.5 font-medium text-gray-900">
                         <div>{c.rep_name}</div>
@@ -585,6 +687,7 @@ function Reports({ isAdmin }) {
 
 function OrgTreeNode({ user, childrenMap, depth }) {
   const children = childrenMap[user.id] || [];
+  const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ');
   return (
     <div className={depth > 0 ? 'ml-5 border-l-2 border-gray-100 pl-3' : ''}>
       <div className="flex items-center gap-2 py-1.5">
@@ -593,7 +696,7 @@ function OrgTreeNode({ user, childrenMap, depth }) {
         }`}>
           {user.role === 'supervisor' ? 'Sup' : 'Rep'}
         </span>
-        <span className={`text-sm text-gray-900 ${!user.active ? 'line-through text-gray-400' : ''}`}>{user.name}</span>
+        <span className={`text-sm text-gray-900 ${!user.active ? 'line-through text-gray-400' : ''}`}>{displayName}</span>
         {user.region && <span className="text-xs text-gray-400">· {user.region}</span>}
         {!user.active && <span className="text-xs text-red-400 font-medium">Disabled</span>}
       </div>
@@ -640,6 +743,8 @@ function Team({ currentUser }) {
     ? (childrenMap['__root__'] || []).filter(u => u.role === 'rep')
     : [];
 
+  const currentUserName = [currentUser?.first_name, currentUser?.last_name].filter(Boolean).join(' ');
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
@@ -647,7 +752,7 @@ function Team({ currentUser }) {
           <div className="mb-3 pb-3 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-purple-100 text-purple-700">Sup</span>
-              <span className="font-semibold text-gray-900">{currentUser?.name} (You)</span>
+              <span className="font-semibold text-gray-900">{currentUserName} (You)</span>
             </div>
           </div>
         )}
@@ -668,14 +773,17 @@ function Team({ currentUser }) {
       {unassigned.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Unassigned Reps</p>
-          {unassigned.map(u => (
-            <div key={u.id} className="flex items-center gap-2 py-1.5">
-              <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700">Rep</span>
-              <span className={`text-sm text-gray-900 ${!u.active ? 'line-through text-gray-400' : ''}`}>{u.name}</span>
-              {u.region && <span className="text-xs text-gray-400">· {u.region}</span>}
-              {!u.active && <span className="text-xs text-red-400 font-medium">Disabled</span>}
-            </div>
-          ))}
+          {unassigned.map(u => {
+            const uName = [u.first_name, u.last_name].filter(Boolean).join(' ');
+            return (
+              <div key={u.id} className="flex items-center gap-2 py-1.5">
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-blue-100 text-blue-700">Rep</span>
+                <span className={`text-sm text-gray-900 ${!u.active ? 'line-through text-gray-400' : ''}`}>{uName}</span>
+                {u.region && <span className="text-xs text-gray-400">· {u.region}</span>}
+                {!u.active && <span className="text-xs text-red-400 font-medium">Disabled</span>}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -693,7 +801,7 @@ export default function SupervisorDashboard() {
       <div className="max-w-6xl mx-auto px-4 py-6">
         <div className="mb-6">
           <h1 className="text-xl font-bold text-gray-900">
-            Welcome back, {user?.name?.split(' ')[0]}
+            Welcome back, {user?.first_name || ''}
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             {isAdmin ? 'Admin Dashboard' : 'Supervisor Dashboard'}

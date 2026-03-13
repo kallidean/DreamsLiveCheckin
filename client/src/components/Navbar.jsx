@@ -26,7 +26,7 @@ export default function Navbar() {
           DreamsLive Check-In
         </Link>
         <div className="flex items-center gap-3">
-          <span className="hidden sm:block text-sm text-gray-600 font-medium">{user.name}</span>
+          <span className="hidden sm:block text-sm text-gray-600 font-medium">{[user.first_name, user.last_name].filter(Boolean).join(' ')}</span>
           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${ROLE_COLORS[user.role] || 'bg-gray-100 text-gray-700'}`}>
             {user.role}
           </span>

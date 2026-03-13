@@ -14,14 +14,14 @@ async function seed() {
 
     // Insert users
     await client.query(`
-      INSERT INTO users (name, email, phone, role, region, category, password_hash, verified) VALUES
-        ('Admin User', 'elitovsky@zenproject.net', '555-000-0001', 'admin', NULL, NULL, $1, true),
-        ('Supervisor Sam', 'Marketing@dreamsresources.com', '555-000-0002', 'supervisor', NULL, NULL, $2, true),
-        ('Rep One', 'rep1@test.com', '555-000-0003', 'rep', 'North', 'Retail', $3, true),
-        ('Rep Two', 'rep2@test.com', '555-000-0004', 'rep', 'North', 'Wholesale', $3, true),
-        ('Rep Three', 'rep3@test.com', '555-000-0005', 'rep', 'North', 'Retail', $3, true),
-        ('Rep Four', 'rep4@test.com', '555-000-0006', 'rep', 'South', 'Wholesale', $3, true),
-        ('Rep Five', 'rep5@test.com', '555-000-0007', 'rep', 'South', 'Retail', $3, true)
+      INSERT INTO users (first_name, last_name, email, phone, role, region, category, password_hash, verified) VALUES
+        ('Admin', 'User', 'elitovsky@zenproject.net', '555-000-0001', 'admin', NULL, NULL, $1, true),
+        ('Supervisor', 'Sam', 'Marketing@dreamsresources.com', '555-000-0002', 'supervisor', NULL, NULL, $2, true),
+        ('Rep', 'One', 'rep1@test.com', '555-000-0003', 'rep', NULL, 'Retail', $3, true),
+        ('Rep', 'Two', 'rep2@test.com', '555-000-0004', 'rep', NULL, 'Wholesale', $3, true),
+        ('Rep', 'Three', 'rep3@test.com', '555-000-0005', 'rep', NULL, 'Retail', $3, true),
+        ('Rep', 'Four', 'rep4@test.com', '555-000-0006', 'rep', NULL, 'Wholesale', $3, true),
+        ('Rep', 'Five', 'rep5@test.com', '555-000-0007', 'rep', NULL, 'Retail', $3, true)
       ON CONFLICT (email) DO NOTHING
     `, [adminHash, superHash, repHash]);
 
@@ -41,7 +41,7 @@ async function seed() {
 
     // Get user and location IDs for check-ins
     const { rows: users } = await client.query(
-      "SELECT id, name FROM users WHERE role = 'rep' ORDER BY email"
+      "SELECT id, first_name FROM users WHERE role = 'rep' ORDER BY email"
     );
     const { rows: locations } = await client.query('SELECT id FROM locations ORDER BY created_at');
 

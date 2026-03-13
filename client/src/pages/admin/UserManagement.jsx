@@ -1,20 +1,86 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle, Save, UserPlus, UserX, UserCheck, Search } from 'lucide-react';
+import { CheckCircle, XCircle, UserPlus, UserX, UserCheck, Search, Save, ChevronUp, ChevronDown } from 'lucide-react';
 import api from '../../lib/axios';
 import Navbar from '../../components/Navbar';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 
-// Desktop: 10 proportional fr columns — fully fluid, resizes with the browser window
-// Order: Name | Email | Phone | Role | Region | Supervisor | Category | Verified | Save | Status
-const GRID = 'md:grid-cols-[1.5fr_2fr_1fr_0.8fr_0.7fr_1.5fr_1fr_0.8fr_0.6fr_0.8fr]';
+// Desktop: 10 proportional fr columns — fully fluid
+// Order: First | Last | Email | Phone | Role | Region | Supervisor | Category | Verified | Status
+const GRID = 'md:grid-cols-[1.2fr_1.2fr_1.8fr_1fr_0.8fr_0.7fr_1.5fr_1fr_0.6fr_0.8fr]';
+
+const FIELD_LABELS = {
+  first_name: 'First Name',
+  last_name: 'Last Name',
+  email: 'Email',
+  phone: 'Phone',
+  role: 'Role',
+  region: 'Region',
+  category: 'Category',
+  verified: 'Verified',
+  active: 'Status',
+  supervisor_id: 'Supervisor',
+};
+
+function getOriginal(user) {
+  return {
+    first_name: user.first_name || '',
+    last_name: user.last_name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    role: user.role || 'rep',
+    region: user.region || '',
+    category: user.category || '',
+    verified: !!user.verified,
+    active: user.active !== false,
+    supervisor_id: String(user.supervisor_id || ''),
+  };
+}
+
+function buildChanges(original, draft, supervisors) {
+  const changes = [];
+  for (const field of Object.keys(FIELD_LABELS)) {
+    const origVal = original[field] ?? '';
+    const draftVal = draft[field] ?? '';
+    if (String(origVal) !== String(draftVal)) {
+      let origDisplay = String(origVal);
+      let draftDisplay = String(draftVal);
+      if (field === 'supervisor_id') {
+        origDisplay = supervisors.find(s => String(s.id) === origDisplay)?.name || origDisplay || '(none)';
+        draftDisplay = supervisors.find(s => String(s.id) === draftDisplay)?.name || draftDisplay || '(none)';
+      } else if (field === 'verified' || field === 'active') {
+        origDisplay = origVal ? 'Yes' : 'No';
+        draftDisplay = draftVal ? 'Yes' : 'No';
+      }
+      if (!origDisplay) origDisplay = '(empty)';
+      if (!draftDisplay) draftDisplay = '(empty)';
+      changes.push({ field, label: FIELD_LABELS[field], old: origDisplay, new: draftDisplay });
+    }
+  }
+  return changes;
+}
+
+function SortHeader({ label, field, sortField, sortDir, onSort }) {
+  const active = sortField === field;
+  return (
+    <div
+      className="flex items-center gap-0.5 cursor-pointer select-none hover:text-gray-700 transition-colors"
+      onClick={() => onSort(field)}
+    >
+      {label}
+      {active
+        ? (sortDir === 'asc' ? <ChevronUp size={11} /> : <ChevronDown size={11} />)
+        : <ChevronUp size={11} className="opacity-20" />}
+    </div>
+  );
+}
 
 function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [form, setForm] = useState({
-    name: '', email: '', password: '', phone: '',
+    first_name: '', last_name: '', email: '', password: '', phone: '',
     role: 'rep', region: '', category: '', supervisor_id: defaultSupervisorId || '',
   });
   const [error, setError] = useState('');
@@ -34,6 +100,7 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!form.first_name.trim()) { setError('First name is required.'); return; }
     if (form.role === 'rep' && !form.supervisor_id) {
       setError('A supervisor is required for reps.');
       return;
@@ -48,12 +115,20 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
       )}
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
-          <div className="col-span-2">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">First Name *</label>
             <input
               required
-              value={form.name}
-              onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
+              value={form.first_name}
+              onChange={e => setForm(p => ({ ...p, first_name: e.target.value }))}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Last Name</label>
+            <input
+              value={form.last_name}
+              onChange={e => setForm(p => ({ ...p, last_name: e.target.value }))}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -152,73 +227,95 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   );
 }
 
+function ConfirmDialog({ item, onProceed, onSkip, onCancel, isLoading, queuePos, queueTotal }) {
+  const { draft, changes } = item;
+  const fullName = [draft.first_name, draft.last_name].filter(Boolean).join(' ');
+  return (
+    <Modal isOpen onClose={onCancel} title={`Confirm Changes — ${queuePos} of ${queueTotal}`}>
+      <p className="text-sm text-gray-700 mb-4">
+        Save the following changes for <strong>{fullName || item.user.email}</strong>?
+      </p>
+      {changes.length === 0 ? (
+        <p className="text-sm text-gray-500 mb-4">No changes detected.</p>
+      ) : (
+        <div className="space-y-1.5 mb-6 border border-gray-100 rounded-lg p-3 bg-gray-50">
+          {changes.map(({ label, old: oldVal, new: newVal }) => (
+            <div key={label} className="flex flex-wrap items-center gap-x-2 text-sm">
+              <span className="font-medium text-gray-600 shrink-0">{label}:</span>
+              <span className="text-red-500 line-through shrink-0">{oldVal}</span>
+              <span className="text-gray-400 shrink-0">→</span>
+              <span className="text-green-600 shrink-0">{newVal}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-2 justify-end">
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm text-red-600 hover:text-red-800 border border-red-200 rounded-lg transition-colors"
+        >
+          Cancel All
+        </button>
+        <button
+          onClick={onSkip}
+          className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 border border-gray-300 rounded-lg transition-colors"
+        >
+          Skip
+        </button>
+        <button
+          onClick={onProceed}
+          disabled={isLoading}
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+        >
+          {isLoading ? 'Saving…' : 'Proceed'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
 const inputCls = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-function UserRow({ user, supervisors, regions, hasDirectReports }) {
-  const queryClient = useQueryClient();
-  const { addToast } = useToast();
-  const [edits, setEdits] = useState({
-    name: user.name || '',
-    email: user.email || '',
-    role: user.role,
-    phone: user.phone || '',
-    region: user.region || '',
-    category: user.category || '',
-    verified: user.verified,
-    active: user.active !== false,
-    supervisor_id: user.supervisor_id || '',
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (data) => api.patch(`/api/users/${user.id}`, data).then(r => r.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      queryClient.invalidateQueries({ queryKey: ['supervisors'] });
-      addToast(`${user.name} updated successfully`, 'success');
-    },
-    onError: (err) => {
-      addToast(err.response?.data?.error || 'Failed to update user', 'error');
-    },
-  });
-
-  function handleToggleActive() {
-    const action = edits.active ? 'disable' : 'enable';
-    if (window.confirm(`${action.charAt(0).toUpperCase() + action.slice(1)} ${user.name}?`)) {
-      setEdits(p => ({ ...p, active: !p.active }));
-    }
-  }
-
-  function handleSave() {
-    updateMutation.mutate({ ...edits, supervisor_id: edits.supervisor_id || null });
-  }
-
+function UserRow({ user, draft, onFieldChange, supervisors, regions, hasDirectReports, isDirty }) {
   return (
-    <div className={`border-b border-gray-100 px-3 py-3 last:border-b-0 ${!edits.active ? 'opacity-50' : 'hover:bg-gray-50'}`}>
+    <div className={`border-b border-gray-100 px-3 py-3 last:border-b-0 transition-colors ${
+      !draft.active ? 'opacity-50' : isDirty ? 'bg-yellow-50' : 'hover:bg-gray-50'
+    }`}>
       {/*
-        Mobile : grid-cols-3  — 9 visible items → 3×3
-          Row 1: Name (+ verified icon)  | Email      | Phone
-          Row 2: Role                    | Region     | Supervisor
-          Row 3: Category                | Save       | Status
-        Desktop: 10-column fr grid (Verified shown as its own column, hidden on mobile)
+        Mobile: grid-cols-3 — 9 visible items → 3×3
+          Row 1: Name (first+last stacked + verified icon)  | Email      | Phone
+          Row 2: Role                                       | Region     | Supervisor
+          Row 3: Category                                   | Verified(hidden) | Status
+        Desktop: 10-column fr grid (First | Last as separate columns; Verified its own col)
       */}
       <div className={`grid grid-cols-3 gap-2 ${GRID} md:items-center`}>
 
-        {/* 1 — Name  +  verified toggle (icon only on mobile) */}
+        {/* 1 — First Name cell (mobile: stacks last name + verified icon beneath) */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Name</span>
-          <div className="flex items-center gap-1">
-            <input
-              value={edits.name}
-              onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
-              className={`${inputCls} flex-1 min-w-0`}
-              placeholder="Name"
-            />
+          <div className="flex items-start gap-1">
+            <div className="flex-1 min-w-0 flex flex-col gap-1">
+              <input
+                value={draft.first_name}
+                onChange={e => onFieldChange(user.id, 'first_name', e.target.value)}
+                className={inputCls}
+                placeholder="First"
+              />
+              {/* Last name stacked under first name on mobile only */}
+              <input
+                value={draft.last_name}
+                onChange={e => onFieldChange(user.id, 'last_name', e.target.value)}
+                className={`${inputCls} md:hidden`}
+                placeholder="Last"
+              />
+            </div>
+            {/* Verified toggle icon — mobile only */}
             <button
               type="button"
-              onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
-              title={edits.verified ? 'Verified — click to unverify' : 'Not verified — click to verify'}
-              className={`md:hidden shrink-0 transition-colors ${
-                edits.verified ? 'text-green-500 hover:text-green-700' : 'text-gray-300 hover:text-gray-500'
+              onClick={() => onFieldChange(user.id, 'verified', !draft.verified)}
+              title={draft.verified ? 'Verified — click to unverify' : 'Not verified — click to verify'}
+              className={`md:hidden mt-1 shrink-0 transition-colors ${
+                draft.verified ? 'text-green-500 hover:text-green-700' : 'text-gray-300 hover:text-gray-500'
               }`}
             >
               <CheckCircle size={15} />
@@ -226,34 +323,44 @@ function UserRow({ user, supervisors, regions, hasDirectReports }) {
           </div>
         </div>
 
-        {/* 2 — Email */}
+        {/* 2 — Last Name (desktop only) */}
+        <div className="hidden md:flex flex-col min-w-0">
+          <input
+            value={draft.last_name}
+            onChange={e => onFieldChange(user.id, 'last_name', e.target.value)}
+            className={inputCls}
+            placeholder="Last Name"
+          />
+        </div>
+
+        {/* 3 — Email */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Email</span>
           <input
             type="email"
-            value={edits.email}
-            onChange={e => setEdits(p => ({ ...p, email: e.target.value }))}
+            value={draft.email}
+            onChange={e => onFieldChange(user.id, 'email', e.target.value)}
             className={inputCls}
           />
         </div>
 
-        {/* 3 — Phone */}
+        {/* 4 — Phone */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Phone</span>
           <input
-            value={edits.phone}
-            onChange={e => setEdits(p => ({ ...p, phone: e.target.value }))}
+            value={draft.phone}
+            onChange={e => onFieldChange(user.id, 'phone', e.target.value)}
             className={inputCls}
             placeholder="Phone"
           />
         </div>
 
-        {/* 4 — Role */}
+        {/* 5 — Role */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Role</span>
           <select
-            value={edits.role}
-            onChange={e => setEdits(p => ({ ...p, role: e.target.value }))}
+            value={draft.role}
+            onChange={e => onFieldChange(user.id, 'role', e.target.value)}
             disabled={user.role === 'supervisor' && hasDirectReports}
             title={user.role === 'supervisor' && hasDirectReports
               ? 'Reassign all direct reports before changing this role'
@@ -266,12 +373,12 @@ function UserRow({ user, supervisors, regions, hasDirectReports }) {
           </select>
         </div>
 
-        {/* 5 — Region */}
+        {/* 6 — Region */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Region</span>
           <select
-            value={edits.region}
-            onChange={e => setEdits(p => ({ ...p, region: e.target.value }))}
+            value={draft.region}
+            onChange={e => onFieldChange(user.id, 'region', e.target.value)}
             className={inputCls}
           >
             <option value="">—</option>
@@ -281,12 +388,12 @@ function UserRow({ user, supervisors, regions, hasDirectReports }) {
           </select>
         </div>
 
-        {/* 6 — Supervisor */}
+        {/* 7 — Supervisor */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Supervisor</span>
           <select
-            value={edits.supervisor_id}
-            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
+            value={draft.supervisor_id}
+            onChange={e => onFieldChange(user.id, 'supervisor_id', e.target.value)}
             className={inputCls}
           >
             <option value="">— None —</option>
@@ -296,55 +403,41 @@ function UserRow({ user, supervisors, regions, hasDirectReports }) {
           </select>
         </div>
 
-        {/* 7 — Category  (mobile: row 3 col 1 — replaces Verified) */}
+        {/* 8 — Category */}
         <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Category</span>
           <input
-            value={edits.category}
-            onChange={e => setEdits(p => ({ ...p, category: e.target.value }))}
+            value={draft.category}
+            onChange={e => onFieldChange(user.id, 'category', e.target.value)}
             className={inputCls}
             placeholder="Category"
           />
         </div>
 
-        {/* 8 — Verified  (desktop only — hidden on mobile so the grid stays 3×3) */}
+        {/* 9 — Verified (desktop only — hidden on mobile so 3×3 is preserved) */}
         <div className="hidden md:flex flex-col justify-center min-w-0">
           <button
             type="button"
-            onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
+            onClick={() => onFieldChange(user.id, 'verified', !draft.verified)}
             className={`flex items-center gap-1 text-sm font-medium transition-colors ${
-              edits.verified ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'
+              draft.verified ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            {edits.verified ? <><CheckCircle size={14} /> Verified</> : <><XCircle size={14} /> No</>}
+            {draft.verified ? <><CheckCircle size={14} /> Verified</> : <><XCircle size={14} /> No</>}
           </button>
         </div>
 
-        {/* 9 — Save */}
-        <div className="flex flex-col justify-center min-w-0">
-          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Save</span>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={updateMutation.isPending}
-            className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
-          >
-            <Save size={14} />
-            {updateMutation.isPending ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-
-        {/* 10 — Status */}
+        {/* 10 — Status (enable/disable) */}
         <div className="flex flex-col justify-center min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Status</span>
           <button
             type="button"
-            onClick={handleToggleActive}
+            onClick={() => onFieldChange(user.id, 'active', !draft.active)}
             className={`flex items-center gap-1 text-sm font-medium ${
-              edits.active ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'
+              draft.active ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'
             }`}
           >
-            {edits.active ? <><UserX size={14} /> Disable</> : <><UserCheck size={14} /> Enable</>}
+            {draft.active ? <><UserX size={14} /> Disable</> : <><UserCheck size={14} /> Enable</>}
           </button>
         </div>
 
@@ -354,9 +447,16 @@ function UserRow({ user, supervisors, regions, hasDirectReports }) {
 }
 
 export default function UserManagement() {
+  const queryClient = useQueryClient();
+  const { addToast } = useToast();
   const [showAddUser, setShowAddUser] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSupervisorId, setFilterSupervisorId] = useState('');
+  const [sortField, setSortField] = useState('last_name');
+  const [sortDir, setSortDir] = useState('asc');
+  const [drafts, setDrafts] = useState({});
+  const [saveQueue, setSaveQueue] = useState([]);
+  const [saveQueueIdx, setSaveQueueIdx] = useState(0);
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -374,7 +474,10 @@ export default function UserManagement() {
     staleTime: Infinity,
   });
 
-  // Set of user IDs who have at least one direct report (supervisor_id pointing to them)
+  const updateMutation = useMutation({
+    mutationFn: ({ userId, payload }) => api.patch(`/api/users/${userId}`, payload).then(r => r.data),
+  });
+
   const supervisorsWithReports = useMemo(() => {
     if (!data) return new Set();
     const s = new Set();
@@ -384,22 +487,124 @@ export default function UserManagement() {
     return s;
   }, [data]);
 
-  const filteredUsers = useMemo(() => {
+  function getEffectiveDraft(user) {
+    return { ...getOriginal(user), ...(drafts[user.id] || {}) };
+  }
+
+  function handleFieldChange(userId, field, value) {
+    setDrafts(prev => ({
+      ...prev,
+      [userId]: { ...(prev[userId] || {}), [field]: value },
+    }));
+  }
+
+  function isUserDirty(user) {
+    const d = drafts[user.id];
+    if (!d) return false;
+    const orig = getOriginal(user);
+    const eff = { ...orig, ...d };
+    return Object.keys(orig).some(k => String(eff[k] ?? '') !== String(orig[k] ?? ''));
+  }
+
+  function handleSort(field) {
+    if (field === sortField) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  }
+
+  const filteredAndSortedUsers = useMemo(() => {
     if (!data) return [];
     let result = data;
     if (filterSupervisorId) {
-      result = result.filter(u => u.supervisor_id === filterSupervisorId);
+      result = result.filter(u => String(u.supervisor_id) === String(filterSupervisorId));
     }
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      result = result.filter(u =>
-        u.name?.toLowerCase().includes(q) ||
-        u.email?.toLowerCase().includes(q) ||
-        u.phone?.toLowerCase().includes(q)
-      );
+      result = result.filter(u => {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
+        return fullName.includes(q) ||
+          u.email?.toLowerCase().includes(q) ||
+          u.phone?.toLowerCase().includes(q);
+      });
     }
+    result = [...result].sort((a, b) => {
+      const av = String(a[sortField] ?? '').toLowerCase();
+      const bv = String(b[sortField] ?? '').toLowerCase();
+      let cmp = av < bv ? -1 : av > bv ? 1 : 0;
+      if (cmp === 0 && sortField === 'last_name') {
+        const af = String(a.first_name || '').toLowerCase();
+        const bf = String(b.first_name || '').toLowerCase();
+        cmp = af < bf ? -1 : af > bf ? 1 : 0;
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
     return result;
-  }, [data, filterSupervisorId, searchQuery]);
+  }, [data, filterSupervisorId, searchQuery, sortField, sortDir]);
+
+  const dirtyCount = useMemo(() => {
+    if (!data) return 0;
+    return data.filter(u => isUserDirty(u)).length;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, drafts]);
+
+  function handleSaveAll() {
+    if (!data) return;
+    const queue = data
+      .filter(u => isUserDirty(u))
+      .map(u => ({
+        user: u,
+        draft: getEffectiveDraft(u),
+        changes: buildChanges(getOriginal(u), getEffectiveDraft(u), supervisors),
+      }));
+    if (queue.length === 0) return;
+    setSaveQueue(queue);
+    setSaveQueueIdx(0);
+  }
+
+  async function handleProceed() {
+    const item = saveQueue[saveQueueIdx];
+    if (!item) return;
+    try {
+      await updateMutation.mutateAsync({
+        userId: item.user.id,
+        payload: {
+          ...item.draft,
+          supervisor_id: item.draft.supervisor_id || null,
+          region: item.draft.region || null,
+          phone: item.draft.phone || null,
+          last_name: item.draft.last_name || null,
+          category: item.draft.category || null,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['supervisors'] });
+      setDrafts(prev => {
+        const next = { ...prev };
+        delete next[item.user.id];
+        return next;
+      });
+      const name = [item.draft.first_name, item.draft.last_name].filter(Boolean).join(' ');
+      addToast(`${name || item.user.email} updated`, 'success');
+      advanceQueue();
+    } catch (err) {
+      addToast(err.response?.data?.error || 'Failed to update user', 'error');
+    }
+  }
+
+  function advanceQueue() {
+    const nextIdx = saveQueueIdx + 1;
+    if (nextIdx >= saveQueue.length) {
+      setSaveQueue([]);
+      setSaveQueueIdx(0);
+    } else {
+      setSaveQueueIdx(nextIdx);
+    }
+  }
+
+  const sortProps = { sortField, sortDir, onSort: handleSort };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -408,13 +613,27 @@ export default function UserManagement() {
 
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-gray-900">User Management</h1>
-          <button
-            onClick={() => setShowAddUser(true)}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-          >
-            <UserPlus size={16} />
-            Add User
-          </button>
+          <div className="flex items-center gap-2">
+            {dirtyCount > 0 && (
+              <button
+                onClick={handleSaveAll}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                <Save size={15} />
+                Save Changes
+                <span className="bg-white text-green-700 text-xs font-bold px-1.5 py-0.5 rounded-full leading-none">
+                  {dirtyCount}
+                </span>
+              </button>
+            )}
+            <button
+              onClick={() => setShowAddUser(true)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+            >
+              <UserPlus size={16} />
+              Add User
+            </button>
+          </div>
         </div>
 
         {/* Search + supervisor filter */}
@@ -449,28 +668,31 @@ export default function UserManagement() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
           {/* Column headers — desktop only, same GRID template as rows */}
           <div className={`hidden md:grid gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide ${GRID}`}>
-            <div>Name</div>
-            <div>Email</div>
-            <div>Phone</div>
-            <div>Role</div>
-            <div>Region</div>
-            <div>Supervisor</div>
-            <div>Category</div>
+            <SortHeader label="First Name" field="first_name" {...sortProps} />
+            <SortHeader label="Last Name" field="last_name" {...sortProps} />
+            <SortHeader label="Email" field="email" {...sortProps} />
+            <SortHeader label="Phone" field="phone" {...sortProps} />
+            <SortHeader label="Role" field="role" {...sortProps} />
+            <SortHeader label="Region" field="region" {...sortProps} />
+            <SortHeader label="Supervisor" field="supervisor_id" {...sortProps} />
+            <SortHeader label="Category" field="category" {...sortProps} />
             <div>Verified</div>
-            <div>Save</div>
-            <div>Status</div>
+            <SortHeader label="Status" field="active" {...sortProps} />
           </div>
 
-          {filteredUsers.map(user => (
+          {filteredAndSortedUsers.map(user => (
             <UserRow
               key={user.id}
               user={user}
+              draft={getEffectiveDraft(user)}
+              onFieldChange={handleFieldChange}
               supervisors={supervisors}
               regions={regions}
               hasDirectReports={supervisorsWithReports.has(user.id)}
+              isDirty={isUserDirty(user)}
             />
           ))}
-          {!isLoading && filteredUsers.length === 0 && (
+          {!isLoading && filteredAndSortedUsers.length === 0 && (
             <div className="px-4 py-8 text-center text-gray-400">No users found</div>
           )}
         </div>
@@ -483,6 +705,18 @@ export default function UserManagement() {
           supervisors={supervisors}
           defaultSupervisorId={filterSupervisorId}
           regions={regions}
+        />
+      )}
+
+      {saveQueue.length > 0 && saveQueueIdx < saveQueue.length && (
+        <ConfirmDialog
+          item={saveQueue[saveQueueIdx]}
+          onProceed={handleProceed}
+          onSkip={advanceQueue}
+          onCancel={() => { setSaveQueue([]); setSaveQueueIdx(0); }}
+          isLoading={updateMutation.isPending}
+          queuePos={saveQueueIdx + 1}
+          queueTotal={saveQueue.length}
         />
       )}
     </div>

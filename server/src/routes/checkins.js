@@ -40,6 +40,10 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
     return res.status(400).json({ error: 'Business name and contact name are required' });
   }
 
+  const repName = req.user.last_name
+    ? `${req.user.last_name}, ${req.user.first_name}`
+    : req.user.first_name;
+
   try {
     // Reverse geocode
     let address_resolved = null;
@@ -115,7 +119,7 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
       timeStyle: 'short',
       ...(timezone ? { timeZone: timezone } : {}),
     });
-    const subject = `Check-in: ${req.user.name} @ ${business_name} — ${timeStr}`;
+    const subject = `Check-in: ${repName} @ ${business_name} — ${timeStr}`;
 
     try {
       const { rows: supervisors } = await pool.query(
@@ -127,7 +131,7 @@ router.post('/', requireAuth, requireRole('rep', 'supervisor', 'admin'), async (
         const html = `
           <h2>New Check-In Received</h2>
           <table style="border-collapse:collapse;width:100%">
-            <tr><td style="padding:8px;font-weight:bold">Rep</td><td style="padding:8px">${req.user.name}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold">Rep</td><td style="padding:8px">${repName}</td></tr>
             <tr><td style="padding:8px;font-weight:bold">Time</td><td style="padding:8px">${timeStr}</td></tr>
             <tr><td style="padding:8px;font-weight:bold">Business</td><td style="padding:8px">${business_name}</td></tr>
             <tr><td style="padding:8px;font-weight:bold">Contact</td><td style="padding:8px">${contact_name}</td></tr>
@@ -237,6 +241,11 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
     conditions.push(`c.checked_in_at <= $${params.length}::date + interval '1 day'`);
   }
 
+  const repNameExpr = `CASE WHEN u.last_name IS NOT NULL AND u.last_name != ''
+                            THEN u.last_name || ', ' || u.first_name
+                            ELSE u.first_name
+                       END`;
+
   try {
     let queryText;
     if (scopeSupervisorId) {
@@ -247,7 +256,7 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
           UNION ALL
           SELECT u.id FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
         )
-        SELECT c.*, u.name as rep_name, u.email as rep_email, u.region, u.category,
+        SELECT c.*, ${repNameExpr} as rep_name, u.email as rep_email, u.region, u.category,
                l.name as location_name, l.address as location_address, l.google_maps_url
         FROM checkins c
         LEFT JOIN users u ON u.id = c.user_id
@@ -258,7 +267,7 @@ router.get('/all', requireAuth, requireRole('supervisor', 'admin'), async (req, 
     } else {
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
       queryText = `
-        SELECT c.*, u.name as rep_name, u.email as rep_email, u.region, u.category,
+        SELECT c.*, ${repNameExpr} as rep_name, u.email as rep_email, u.region, u.category,
                l.name as location_name, l.address as location_address, l.google_maps_url
         FROM checkins c
         LEFT JOIN users u ON u.id = c.user_id

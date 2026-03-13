@@ -9,11 +9,15 @@ const router = express.Router();
 router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT u.id, u.name, u.email, u.phone, u.role, u.region, u.category,
-              u.verified, u.active, u.created_at, u.supervisor_id, s.name as supervisor_name
+      `SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.role, u.region, u.category,
+              u.verified, u.active, u.created_at, u.supervisor_id,
+              CASE WHEN s.last_name IS NOT NULL AND s.last_name != ''
+                   THEN s.last_name || ', ' || s.first_name
+                   ELSE s.first_name
+              END as supervisor_name
        FROM users u
        LEFT JOIN users s ON s.id = u.supervisor_id
-       ORDER BY u.created_at DESC`
+       ORDER BY u.last_name ASC NULLS LAST, u.first_name ASC`
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -24,17 +28,17 @@ router.get('/', requireAuth, requireRole('admin'), async (req, res) => {
 
 // POST /api/users — admin only
 router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
-  const { name, email, password, phone, role = 'rep', region, category, supervisor_id } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password are required' });
+  const { first_name, last_name, email, password, phone, role = 'rep', region, category, supervisor_id } = req.body;
+  if (!first_name || !email || !password) {
+    return res.status(400).json({ error: 'First name, email, and password are required' });
   }
   try {
     const password_hash = await bcrypt.hash(password, 10);
     const { rows } = await pool.query(
-      `INSERT INTO users (name, email, phone, role, region, category, password_hash, verified, supervisor_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
-       RETURNING id, name, email, phone, role, region, category, verified, created_at, supervisor_id`,
-      [name, email, phone || null, role, region || null, category || null, password_hash, supervisor_id || null]
+      `INSERT INTO users (first_name, last_name, email, phone, role, region, category, password_hash, verified, supervisor_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9)
+       RETURNING id, first_name, last_name, email, phone, role, region, category, verified, created_at, supervisor_id`,
+      [first_name, last_name || null, email, phone || null, role, region || null, category || null, password_hash, supervisor_id || null]
     );
     res.json({ success: true, data: rows[0] });
   } catch (err) {
@@ -50,7 +54,13 @@ router.post('/', requireAuth, requireRole('admin'), async (req, res) => {
 router.get('/supervisors', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      `SELECT id, name FROM users WHERE role = 'supervisor' AND active = true ORDER BY name ASC`
+      `SELECT id,
+              CASE WHEN last_name IS NOT NULL AND last_name != ''
+                   THEN last_name || ', ' || first_name
+                   ELSE first_name
+              END as name
+       FROM users WHERE role = 'supervisor' AND active = true
+       ORDER BY last_name ASC NULLS LAST, first_name ASC`
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -64,6 +74,10 @@ router.get('/supervisors', requireAuth, requireRole('admin'), async (req, res) =
 // supervisor's team if ?supervisor_id=xxx is provided.
 router.get('/reps', requireAuth, requireRole('supervisor', 'admin'), async (req, res) => {
   const { supervisor_id } = req.query;
+  const nameExpr = `CASE WHEN last_name IS NOT NULL AND last_name != ''
+                         THEN last_name || ', ' || first_name
+                         ELSE first_name
+                    END`;
   try {
     let rows;
     if (req.user.role === 'admin') {
@@ -74,15 +88,17 @@ router.get('/reps', requireAuth, requireRole('supervisor', 'admin'), async (req,
              UNION ALL
              SELECT u.id FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
            )
-           SELECT id, name FROM users
+           SELECT id, ${nameExpr} as name FROM users
            WHERE role = 'rep' AND active = true AND id IN (SELECT id FROM subordinates)
-           ORDER BY name ASC`,
+           ORDER BY last_name ASC NULLS LAST, first_name ASC`,
           [supervisor_id]
         );
         rows = result.rows;
       } else {
         const result = await pool.query(
-          `SELECT id, name FROM users WHERE role = 'rep' AND active = true ORDER BY name ASC`
+          `SELECT id, ${nameExpr} as name FROM users
+           WHERE role = 'rep' AND active = true
+           ORDER BY last_name ASC NULLS LAST, first_name ASC`
         );
         rows = result.rows;
       }
@@ -93,9 +109,9 @@ router.get('/reps', requireAuth, requireRole('supervisor', 'admin'), async (req,
            UNION ALL
            SELECT u.id FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
          )
-         SELECT id, name FROM users
+         SELECT id, ${nameExpr} as name FROM users
          WHERE role = 'rep' AND active = true AND id IN (SELECT id FROM subordinates)
-         ORDER BY name ASC`,
+         ORDER BY last_name ASC NULLS LAST, first_name ASC`,
         [req.user.id]
       );
       rows = result.rows;
@@ -114,20 +130,20 @@ router.get('/team', requireAuth, requireRole('supervisor', 'admin'), async (req,
     let rows;
     if (req.user.role === 'admin') {
       const result = await pool.query(
-        `SELECT id, name, role, region, category, supervisor_id, active
-         FROM users WHERE role != 'admin' ORDER BY name ASC`
+        `SELECT id, first_name, last_name, role, region, category, supervisor_id, active
+         FROM users WHERE role != 'admin' ORDER BY last_name ASC NULLS LAST, first_name ASC`
       );
       rows = result.rows;
     } else {
       const result = await pool.query(
         `WITH RECURSIVE subordinates AS (
-           SELECT id, name, role, region, category, supervisor_id, active
+           SELECT id, first_name, last_name, role, region, category, supervisor_id, active
            FROM users WHERE supervisor_id = $1
            UNION ALL
-           SELECT u.id, u.name, u.role, u.region, u.category, u.supervisor_id, u.active
+           SELECT u.id, u.first_name, u.last_name, u.role, u.region, u.category, u.supervisor_id, u.active
            FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
          )
-         SELECT * FROM subordinates ORDER BY name ASC`,
+         SELECT * FROM subordinates ORDER BY last_name ASC NULLS LAST, first_name ASC`,
         [req.user.id]
       );
       rows = result.rows;
@@ -142,7 +158,7 @@ router.get('/team', requireAuth, requireRole('supervisor', 'admin'), async (req,
 // PATCH /api/users/:id — admin only
 router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
-  const { name, role, region, category, verified, active, phone, email, supervisor_id } = req.body;
+  const { first_name, last_name, role, region, category, verified, active, phone, email, supervisor_id } = req.body;
 
   // If role is being changed away from supervisor, ensure no direct reports exist
   if (role !== undefined) {
@@ -192,9 +208,13 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const updates = [];
   const params = [];
 
-  if (name !== undefined && name) {
-    params.push(name);
-    updates.push(`name = $${params.length}`);
+  if (first_name !== undefined && first_name) {
+    params.push(first_name);
+    updates.push(`first_name = $${params.length}`);
+  }
+  if (last_name !== undefined) {
+    params.push(last_name || null);
+    updates.push(`last_name = $${params.length}`);
   }
   if (role !== undefined) {
     params.push(role);
@@ -205,7 +225,7 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     updates.push(`region = $${params.length}`);
   }
   if (category !== undefined) {
-    params.push(category);
+    params.push(category || null);
     updates.push(`category = $${params.length}`);
   }
   if (verified !== undefined) {
@@ -237,7 +257,7 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE users SET ${updates.join(', ')} WHERE id = $${params.length}
-       RETURNING id, name, email, phone, role, region, category, verified, active, supervisor_id`,
+       RETURNING id, first_name, last_name, email, phone, role, region, category, verified, active, supervisor_id`,
       params
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });

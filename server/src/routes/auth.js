@@ -25,19 +25,19 @@ router.post('/register', async (req, res) => {
   if (process.env.REGISTRATION_ENABLED !== 'true') {
     return res.status(403).json({ error: 'Registration is currently disabled.' });
   }
-  const { name, email, phone, password } = req.body;
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: 'Name, email, and password are required' });
+  const { first_name, last_name, email, phone, password } = req.body;
+  if (!first_name || !email || !password) {
+    return res.status(400).json({ error: 'First name, email, and password are required' });
   }
   try {
     const password_hash = await bcrypt.hash(password, 10);
     const verification_token = uuidv4();
 
     const { rows } = await pool.query(
-      `INSERT INTO users (name, email, phone, role, password_hash, verified, verification_token)
-       VALUES ($1, $2, $3, 'rep', $4, false, $5)
-       RETURNING id, name, email`,
-      [name, email, phone || null, password_hash, verification_token]
+      `INSERT INTO users (first_name, last_name, email, phone, role, password_hash, verified, verification_token)
+       VALUES ($1, $2, $3, $4, 'rep', $5, false, $6)
+       RETURNING id, first_name, last_name, email`,
+      [first_name, last_name || null, email, phone || null, password_hash, verification_token]
     );
 
     const user = rows[0];
@@ -50,7 +50,7 @@ router.post('/register', async (req, res) => {
         to: email,
         subject: 'Verify your DreamsLive Check-In account',
         html: `
-          <h2>Welcome to DreamsLive Check-In, ${name}!</h2>
+          <h2>Welcome to DreamsLive Check-In, ${first_name}!</h2>
           <p>Please verify your email address by clicking the link below:</p>
           <a href="${verifyUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">Verify Email</a>
           <p>Or copy this link: ${verifyUrl}</p>
@@ -95,7 +95,7 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const payload = { id: user.id, name: user.name, email: user.email, role: user.role, region: user.region };
+    const payload = { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role, region: user.region };
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
     const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
 
@@ -106,7 +106,7 @@ router.post('/login', async (req, res) => {
       success: true,
       accessToken,
       refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role, region: user.region },
+      user: { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role, region: user.region },
     });
   } catch (err) {
     console.error(err);
@@ -147,7 +147,7 @@ router.post('/logout', (req, res) => {
 router.get('/me', requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, email, role, region, category FROM users WHERE id = $1',
+      'SELECT id, first_name, last_name, email, role, region, category FROM users WHERE id = $1',
       [req.user.id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
@@ -164,7 +164,7 @@ router.post('/forgot-password', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'Email is required' });
 
   try {
-    const { rows } = await pool.query('SELECT id, name FROM users WHERE email = $1', [email]);
+    const { rows } = await pool.query('SELECT id, first_name FROM users WHERE email = $1', [email]);
     // Always return success to prevent email enumeration
     if (!rows[0]) return res.json({ success: true });
 
@@ -185,7 +185,7 @@ router.post('/forgot-password', async (req, res) => {
         subject: 'Reset your DreamsLive password',
         html: `
           <h2>Password Reset Request</h2>
-          <p>Hi ${rows[0].name},</p>
+          <p>Hi ${rows[0].first_name},</p>
           <p>Click the button below to reset your password. This link expires in 1 hour.</p>
           <a href="${resetUrl}" style="display:inline-block;padding:12px 24px;background:#2563eb;color:white;text-decoration:none;border-radius:6px;">Reset Password</a>
           <p>Or copy this link: ${resetUrl}</p>
@@ -236,13 +236,13 @@ router.post('/refresh', async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
     const { rows } = await pool.query(
-      'SELECT id, name, email, role, region FROM users WHERE id = $1',
+      'SELECT id, first_name, last_name, email, role, region FROM users WHERE id = $1',
       [decoded.id]
     );
     const user = rows[0];
     if (!user) return res.status(401).json({ error: 'User not found' });
 
-    const payload = { id: user.id, name: user.name, email: user.email, role: user.role, region: user.region };
+    const payload = { id: user.id, first_name: user.first_name, last_name: user.last_name, email: user.email, role: user.role, region: user.region };
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '15m' });
     res.cookie('accessToken', accessToken, { ...COOKIE_OPTS, maxAge: 15 * 60 * 1000 });
     res.json({ success: true, accessToken });
