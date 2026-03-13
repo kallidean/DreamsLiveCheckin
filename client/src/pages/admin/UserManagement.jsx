@@ -253,16 +253,26 @@ function UserRow({ user, supervisors }) {
           <input
             value={edits.name}
             onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-44 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 mb-0.5"
+            className="block border border-gray-300 rounded-lg px-2 py-1 text-sm w-44 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Name"
           />
           <input
             type="email"
             value={edits.email}
             onChange={e => setEdits(p => ({ ...p, email: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-0.5"
+            className="block border border-gray-300 rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1"
           />
-          {!edits.active && <div className="text-xs text-red-500 font-medium mt-0.5">Disabled</div>}
+          <select
+            value={edits.supervisor_id}
+            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
+            className="block border border-gray-300 rounded-lg px-2 py-1 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-blue-500 mt-1 text-gray-600"
+          >
+            <option value="">No Supervisor</option>
+            {supervisors.map(s => (
+              <option key={s.id} value={s.id}>{s.name}</option>
+            ))}
+          </select>
+          {!edits.active && <div className="text-xs text-red-500 font-medium mt-1">Disabled</div>}
         </td>
         <td className="px-4 py-3">
           <input
@@ -298,18 +308,6 @@ function UserRow({ user, supervisors }) {
             className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Category"
           />
-        </td>
-        <td className="px-4 py-3">
-          <select
-            value={edits.supervisor_id}
-            onChange={e => setEdits(p => ({ ...p, supervisor_id: e.target.value }))}
-            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-36 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">— None —</option>
-            {supervisors.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
         </td>
         <td className="px-4 py-3">
           <button
@@ -396,7 +394,7 @@ export default function UserManagement() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  {['Name / Email', 'Phone', 'Role', 'Region', 'Category', 'Supervisor', 'Verified', 'Actions'].map(h => (
+                  {['Name / Email / Supervisor', 'Phone', 'Role', 'Region', 'Category', 'Verified', 'Actions'].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -407,7 +405,7 @@ export default function UserManagement() {
                 ))}
                 {!isLoading && (!data || data.length === 0) && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400">No users found</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-gray-400">No users found</td>
                   </tr>
                 )}
               </tbody>
