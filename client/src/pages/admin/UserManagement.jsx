@@ -6,12 +6,16 @@ import Navbar from '../../components/Navbar';
 import Modal from '../../components/Modal';
 import { useToast } from '../../components/Toast';
 
+// Desktop: 10 proportional fr columns — fully fluid, resizes with the browser window
+// Order: Name | Email | Phone | Role | Region | Supervisor | Category | Verified | Save | Status
+const GRID = 'md:grid-cols-[1.5fr_2fr_1fr_0.8fr_0.7fr_1.5fr_1fr_0.8fr_0.6fr_0.8fr]';
+
 function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [form, setForm] = useState({
     name: '', email: '', password: '', phone: '',
-    role: 'rep', region: '', supervisor_id: defaultSupervisorId || '',
+    role: 'rep', region: '', category: '', supervisor_id: defaultSupervisorId || '',
   });
   const [error, setError] = useState('');
 
@@ -93,7 +97,7 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
               <option value="admin">admin</option>
             </select>
           </div>
-          <div className="col-span-2">
+          <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Region (State)</label>
             <select
               value={form.region}
@@ -105,6 +109,15 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
                 <option key={r.code} value={r.code}>{r.name}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+            <input
+              value={form.category}
+              onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+              placeholder="e.g. Retail"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div className="col-span-2">
             <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -139,19 +152,6 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
   );
 }
 
-// Shared column widths — used in both the header row and each UserRow
-const cellCls = {
-  name:       'md:w-32 md:shrink-0',
-  email:      'md:w-40 md:shrink-0',
-  phone:      'md:w-24 md:shrink-0',
-  role:       'md:w-20 md:shrink-0',
-  region:     'md:w-20 md:shrink-0',
-  supervisor: 'md:w-32 md:shrink-0',
-  verified:   'md:w-20 md:shrink-0',
-  save:       'md:w-16 md:shrink-0',
-  status:     'md:flex-1',
-};
-
 const inputCls = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 function UserRow({ user, supervisors, regions }) {
@@ -163,6 +163,7 @@ function UserRow({ user, supervisors, regions }) {
     role: user.role,
     phone: user.phone || '',
     region: user.region || '',
+    category: user.category || '',
     verified: user.verified,
     active: user.active !== false,
     supervisor_id: user.supervisor_id || '',
@@ -193,20 +194,40 @@ function UserRow({ user, supervisors, regions }) {
 
   return (
     <div className={`border-b border-gray-100 px-3 py-3 last:border-b-0 ${!edits.active ? 'opacity-50' : 'hover:bg-gray-50'}`}>
-      {/* Mobile: 3-col grid  |  Desktop: single flex row */}
-      <div className="grid grid-cols-3 gap-2 md:flex md:flex-nowrap md:items-center md:gap-2">
+      {/*
+        Mobile : grid-cols-3  — 9 visible items → 3×3
+          Row 1: Name (+ verified icon)  | Email      | Phone
+          Row 2: Role                    | Region     | Supervisor
+          Row 3: Category                | Save       | Status
+        Desktop: 10-column fr grid (Verified shown as its own column, hidden on mobile)
+      */}
+      <div className={`grid grid-cols-3 gap-2 ${GRID} md:items-center`}>
 
-        <div className={`flex flex-col ${cellCls.name}`}>
+        {/* 1 — Name  +  verified toggle (icon only on mobile) */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Name</span>
-          <input
-            value={edits.name}
-            onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
-            className={inputCls}
-            placeholder="Name"
-          />
+          <div className="flex items-center gap-1">
+            <input
+              value={edits.name}
+              onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
+              className={`${inputCls} flex-1 min-w-0`}
+              placeholder="Name"
+            />
+            <button
+              type="button"
+              onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
+              title={edits.verified ? 'Verified — click to unverify' : 'Not verified — click to verify'}
+              className={`md:hidden shrink-0 transition-colors ${
+                edits.verified ? 'text-green-500 hover:text-green-700' : 'text-gray-300 hover:text-gray-500'
+              }`}
+            >
+              <CheckCircle size={15} />
+            </button>
+          </div>
         </div>
 
-        <div className={`flex flex-col ${cellCls.email}`}>
+        {/* 2 — Email */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Email</span>
           <input
             type="email"
@@ -216,7 +237,8 @@ function UserRow({ user, supervisors, regions }) {
           />
         </div>
 
-        <div className={`flex flex-col ${cellCls.phone}`}>
+        {/* 3 — Phone */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Phone</span>
           <input
             value={edits.phone}
@@ -226,7 +248,8 @@ function UserRow({ user, supervisors, regions }) {
           />
         </div>
 
-        <div className={`flex flex-col ${cellCls.role}`}>
+        {/* 4 — Role */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Role</span>
           <select
             value={edits.role}
@@ -239,7 +262,8 @@ function UserRow({ user, supervisors, regions }) {
           </select>
         </div>
 
-        <div className={`flex flex-col ${cellCls.region}`}>
+        {/* 5 — Region */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Region</span>
           <select
             value={edits.region}
@@ -253,7 +277,8 @@ function UserRow({ user, supervisors, regions }) {
           </select>
         </div>
 
-        <div className={`flex flex-col ${cellCls.supervisor}`}>
+        {/* 6 — Supervisor */}
+        <div className="flex flex-col min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Supervisor</span>
           <select
             value={edits.supervisor_id}
@@ -267,9 +292,21 @@ function UserRow({ user, supervisors, regions }) {
           </select>
         </div>
 
-        <div className={`flex flex-col justify-center ${cellCls.verified}`}>
-          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Verified</span>
+        {/* 7 — Category  (mobile: row 3 col 1 — replaces Verified) */}
+        <div className="flex flex-col min-w-0">
+          <span className="text-xs text-gray-400 mb-0.5 md:hidden">Category</span>
+          <input
+            value={edits.category}
+            onChange={e => setEdits(p => ({ ...p, category: e.target.value }))}
+            className={inputCls}
+            placeholder="Category"
+          />
+        </div>
+
+        {/* 8 — Verified  (desktop only — hidden on mobile so the grid stays 3×3) */}
+        <div className="hidden md:flex flex-col justify-center min-w-0">
           <button
+            type="button"
             onClick={() => setEdits(p => ({ ...p, verified: !p.verified }))}
             className={`flex items-center gap-1 text-sm font-medium transition-colors ${
               edits.verified ? 'text-green-600 hover:text-green-800' : 'text-gray-400 hover:text-gray-600'
@@ -279,9 +316,11 @@ function UserRow({ user, supervisors, regions }) {
           </button>
         </div>
 
-        <div className={`flex flex-col justify-center ${cellCls.save}`}>
+        {/* 9 — Save */}
+        <div className="flex flex-col justify-center min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Save</span>
           <button
+            type="button"
             onClick={handleSave}
             disabled={updateMutation.isPending}
             className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 font-medium disabled:opacity-50"
@@ -291,9 +330,11 @@ function UserRow({ user, supervisors, regions }) {
           </button>
         </div>
 
-        <div className={`flex flex-col justify-center ${cellCls.status}`}>
+        {/* 10 — Status */}
+        <div className="flex flex-col justify-center min-w-0">
           <span className="text-xs text-gray-400 mb-0.5 md:hidden">Status</span>
           <button
+            type="button"
             onClick={handleToggleActive}
             className={`flex items-center gap-1 text-sm font-medium ${
               edits.active ? 'text-red-400 hover:text-red-600' : 'text-green-500 hover:text-green-700'
@@ -392,17 +433,18 @@ export default function UserManagement() {
         )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-          {/* Column header — desktop only */}
-          <div className="hidden md:flex md:flex-nowrap md:items-center md:gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-            <div className={cellCls.name}>Name</div>
-            <div className={cellCls.email}>Email</div>
-            <div className={cellCls.phone}>Phone</div>
-            <div className={cellCls.role}>Role</div>
-            <div className={cellCls.region}>Region</div>
-            <div className={cellCls.supervisor}>Supervisor</div>
-            <div className={cellCls.verified}>Verified</div>
-            <div className={cellCls.save}>Save</div>
-            <div className={cellCls.status}>Status</div>
+          {/* Column headers — desktop only, same GRID template as rows */}
+          <div className={`hidden md:grid gap-2 px-3 py-2 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide ${GRID}`}>
+            <div>Name</div>
+            <div>Email</div>
+            <div>Phone</div>
+            <div>Role</div>
+            <div>Region</div>
+            <div>Supervisor</div>
+            <div>Category</div>
+            <div>Verified</div>
+            <div>Save</div>
+            <div>Status</div>
           </div>
 
           {filteredUsers.map(user => (
