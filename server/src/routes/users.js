@@ -59,16 +59,33 @@ router.get('/supervisors', requireAuth, requireRole('admin'), async (req, res) =
   }
 });
 
-// GET /api/users/reps — supervisor and admin (for report filter dropdown)
-// Supervisors only see their own team's reps; admins see all
+// GET /api/users/reps — supervisor and admin (for filter dropdowns)
+// Supervisors: scoped to their team. Admins: all reps, or scoped to a
+// supervisor's team if ?supervisor_id=xxx is provided.
 router.get('/reps', requireAuth, requireRole('supervisor', 'admin'), async (req, res) => {
+  const { supervisor_id } = req.query;
   try {
     let rows;
     if (req.user.role === 'admin') {
-      const result = await pool.query(
-        `SELECT id, name FROM users WHERE role = 'rep' AND active = true ORDER BY name ASC`
-      );
-      rows = result.rows;
+      if (supervisor_id) {
+        const result = await pool.query(
+          `WITH RECURSIVE subordinates AS (
+             SELECT id FROM users WHERE supervisor_id = $1
+             UNION ALL
+             SELECT u.id FROM users u INNER JOIN subordinates s ON u.supervisor_id = s.id
+           )
+           SELECT id, name FROM users
+           WHERE role = 'rep' AND active = true AND id IN (SELECT id FROM subordinates)
+           ORDER BY name ASC`,
+          [supervisor_id]
+        );
+        rows = result.rows;
+      } else {
+        const result = await pool.query(
+          `SELECT id, name FROM users WHERE role = 'rep' AND active = true ORDER BY name ASC`
+        );
+        rows = result.rows;
+      }
     } else {
       const result = await pool.query(
         `WITH RECURSIVE subordinates AS (
@@ -125,7 +142,7 @@ router.get('/team', requireAuth, requireRole('supervisor', 'admin'), async (req,
 // PATCH /api/users/:id — admin only
 router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
-  const { role, region, category, verified, active, phone, email, supervisor_id } = req.body;
+  const { name, role, region, category, verified, active, phone, email, supervisor_id } = req.body;
 
   // If supervisor_id is being set, check for circular relationships
   if (supervisor_id !== undefined && supervisor_id !== null && supervisor_id !== '') {
@@ -154,6 +171,10 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const updates = [];
   const params = [];
 
+  if (name !== undefined && name) {
+    params.push(name);
+    updates.push(`name = $${params.length}`);
+  }
   if (role !== undefined) {
     params.push(role);
     updates.push(`role = $${params.length}`);

@@ -34,21 +34,36 @@ function PhotoThumb({ url }) {
 
 function LiveView({ isAdmin }) {
   const queryClient = useQueryClient();
+  const [supervisorId, setSupervisorId] = useState('');
   const [filters, setFilters] = useState({ rep_id: '', region: '', category: '', start_date: '', end_date: '' });
-  const [searchName, setSearchName] = useState('');
   const [expanded, setExpanded] = useState(null);
 
-  const { data = [], isLoading, refetch, isFetching } = useAllCheckins(filters);
+  const checkinsParams = { ...filters, ...(supervisorId ? { filter_supervisor_id: supervisorId } : {}) };
+  const { data = [], isLoading, refetch, isFetching } = useAllCheckins(checkinsParams);
+
+  const { data: supervisors = [] } = useQuery({
+    queryKey: ['supervisors'],
+    queryFn: () => api.get('/api/users/supervisors').then(r => r.data.data),
+    enabled: isAdmin,
+  });
+
+  const { data: reps = [] } = useQuery({
+    queryKey: ['reps-list', supervisorId],
+    queryFn: () => {
+      const q = supervisorId ? `?supervisor_id=${supervisorId}` : '';
+      return api.get(`/api/users/reps${q}`).then(r => r.data.data);
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/api/checkins/${id}`).then(r => r.data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-checkins'] }),
   });
 
-  const filtered = useMemo(() => {
-    if (!searchName.trim()) return data;
-    return data.filter(c => c.rep_name?.toLowerCase().includes(searchName.toLowerCase()));
-  }, [data, searchName]);
+  function handleSupervisorChange(id) {
+    setSupervisorId(id);
+    setFilters(f => ({ ...f, rep_id: '' }));
+  }
 
   function toggleRow(id) {
     setExpanded(prev => (prev === id ? null : id));
@@ -58,12 +73,24 @@ function LiveView({ isAdmin }) {
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <input
-            value={searchName}
-            onChange={e => setSearchName(e.target.value)}
-            placeholder="Search rep name…"
-            className="border border-gray-300 rounded-lg px-3 py-2 text-sm col-span-2 sm:col-span-1 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          {isAdmin && (
+            <select
+              value={supervisorId}
+              onChange={e => handleSupervisorChange(e.target.value)}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All Supervisors</option>
+              {supervisors.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          <select
+            value={filters.rep_id}
+            onChange={e => setFilters(f => ({ ...f, rep_id: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All Reps</option>
+            {reps.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+          </select>
           <select
             value={filters.region}
             onChange={e => setFilters(f => ({ ...f, region: e.target.value }))}
@@ -122,7 +149,7 @@ function LiveView({ isAdmin }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.map(c => (
+              {data.map(c => (
                 <>
                   <tr
                     key={c.id}
@@ -191,7 +218,7 @@ function LiveView({ isAdmin }) {
                   )}
                 </>
               ))}
-              {!isLoading && filtered.length === 0 && (
+              {!isLoading && data.length === 0 && (
                 <tr>
                   <td colSpan={isAdmin ? 9 : 8} className="px-4 py-8 text-center text-gray-400 text-sm">
                     No check-ins found
@@ -223,8 +250,11 @@ function Reports({ isAdmin }) {
   });
 
   const { data: reps = [] } = useQuery({
-    queryKey: ['reps-list'],
-    queryFn: () => api.get('/api/users/reps').then(r => r.data.data),
+    queryKey: ['reps-list', supervisorId],
+    queryFn: () => {
+      const q = supervisorId ? `?supervisor_id=${supervisorId}` : '';
+      return api.get(`/api/users/reps${q}`).then(r => r.data.data);
+    },
   });
 
   const { data = [], isLoading, refetch } = useQuery({

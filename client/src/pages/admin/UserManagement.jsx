@@ -208,6 +208,7 @@ function UserRow({ user, supervisors }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [edits, setEdits] = useState({
+    name: user.name || '',
     email: user.email || '',
     role: user.role,
     phone: user.phone || '',
@@ -249,7 +250,12 @@ function UserRow({ user, supervisors }) {
     <>
       <tr className={`hover:bg-gray-50 ${!edits.active ? 'opacity-50' : ''}`}>
         <td className="px-4 py-3">
-          <div className="font-medium text-gray-900">{user.name}</div>
+          <input
+            value={edits.name}
+            onChange={e => setEdits(p => ({ ...p, name: e.target.value }))}
+            className="border border-gray-300 rounded-lg px-2 py-1 text-sm w-44 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 mb-0.5"
+            placeholder="Name"
+          />
           <input
             type="email"
             value={edits.email}
