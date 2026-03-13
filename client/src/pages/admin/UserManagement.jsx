@@ -154,7 +154,7 @@ function AddUserModal({ onClose, supervisors, defaultSupervisorId, regions }) {
 
 const inputCls = 'w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-function UserRow({ user, supervisors, regions }) {
+function UserRow({ user, supervisors, regions, hasDirectReports }) {
   const queryClient = useQueryClient();
   const { addToast } = useToast();
   const [edits, setEdits] = useState({
@@ -254,7 +254,11 @@ function UserRow({ user, supervisors, regions }) {
           <select
             value={edits.role}
             onChange={e => setEdits(p => ({ ...p, role: e.target.value }))}
-            className={inputCls}
+            disabled={user.role === 'supervisor' && hasDirectReports}
+            title={user.role === 'supervisor' && hasDirectReports
+              ? 'Reassign all direct reports before changing this role'
+              : undefined}
+            className={`${inputCls} disabled:bg-gray-100 disabled:cursor-not-allowed`}
           >
             <option value="rep">rep</option>
             <option value="supervisor">supervisor</option>
@@ -370,6 +374,16 @@ export default function UserManagement() {
     staleTime: Infinity,
   });
 
+  // Set of user IDs who have at least one direct report (supervisor_id pointing to them)
+  const supervisorsWithReports = useMemo(() => {
+    if (!data) return new Set();
+    const s = new Set();
+    for (const u of data) {
+      if (u.supervisor_id) s.add(u.supervisor_id);
+    }
+    return s;
+  }, [data]);
+
   const filteredUsers = useMemo(() => {
     if (!data) return [];
     let result = data;
@@ -448,7 +462,13 @@ export default function UserManagement() {
           </div>
 
           {filteredUsers.map(user => (
-            <UserRow key={user.id} user={user} supervisors={supervisors} regions={regions} />
+            <UserRow
+              key={user.id}
+              user={user}
+              supervisors={supervisors}
+              regions={regions}
+              hasDirectReports={supervisorsWithReports.has(user.id)}
+            />
           ))}
           {!isLoading && filteredUsers.length === 0 && (
             <div className="px-4 py-8 text-center text-gray-400">No users found</div>

@@ -144,6 +144,27 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
   const { id } = req.params;
   const { name, role, region, category, verified, active, phone, email, supervisor_id } = req.body;
 
+  // If role is being changed away from supervisor, ensure no direct reports exist
+  if (role !== undefined) {
+    try {
+      const { rows: current } = await pool.query('SELECT role FROM users WHERE id = $1', [id]);
+      if (!current[0]) return res.status(404).json({ error: 'User not found' });
+      if (current[0].role === 'supervisor' && role !== 'supervisor') {
+        const { rows: reports } = await pool.query(
+          'SELECT id FROM users WHERE supervisor_id = $1 LIMIT 1', [id]
+        );
+        if (reports.length > 0) {
+          return res.status(400).json({
+            error: 'This supervisor has direct reports. Reassign them before changing the role.',
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to validate role change' });
+    }
+  }
+
   // If supervisor_id is being set, check for circular relationships
   if (supervisor_id !== undefined && supervisor_id !== null && supervisor_id !== '') {
     if (supervisor_id === id) {
@@ -180,7 +201,7 @@ router.patch('/:id', requireAuth, requireRole('admin'), async (req, res) => {
     updates.push(`role = $${params.length}`);
   }
   if (region !== undefined) {
-    params.push(region);
+    params.push(region || null);
     updates.push(`region = $${params.length}`);
   }
   if (category !== undefined) {
